@@ -1,0 +1,42 @@
+{
+  "name": "token-economist",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Design-time token cost and quality preview for AI product features.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nethren/token-economist.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:quality": "node server/dev-quality.mjs",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "eval": "vitest run",
+    "eval:live": "echo 'Sends fixture texts to Anthropic count_tokens (free endpoint). Requires ANTHROPIC_API_KEY.' && vitest run tests/live-accuracy.test.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "gpt-tokenizer": "^3.4.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "oxlint": "^1.71.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1",
+    "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
