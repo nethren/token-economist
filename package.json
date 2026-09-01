@@ -2,7 +2,7 @@
   "name": "token-economist",
   "private": true,
   "version": "0.1.0",
-  "description": "Design-time token cost and quality preview for AI product features.",
+  "description": "A planning tool for AI features: estimate model costs, find prompt savings, and check whether a cheaper model meets your quality bar.",
   "license": "MIT",
   "repository": {
     "type": "git",

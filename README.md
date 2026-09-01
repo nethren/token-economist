@@ -1,44 +1,90 @@
 # Token Economist
 
-**A design-time cost/quality preview for AI product features.** Paste the
-prompt you're about to ship, state your scale assumptions, and get — before a
-line of the feature is built — an honest picture of what it will cost to run
-per request and per month across model tiers, concrete ways to make it
-cheaper, and (optionally, for a previewed few cents) evidence about whether a
-cheaper model is good enough.
+**Estimate what an AI feature will cost before you put a model name in the
+PRD.**
+
+I built Token Economist after making the same planning spreadsheet more than
+once. Provider pricing pages gave me a price per million tokens. I still had to
+work out what a six-turn support chat would cost after history, retrieved docs,
+retries, caching, and the model's reply. Then I had to explain whether the
+cheapest model could handle the job.
+
+Token Economist turns a draft prompt and rough usage numbers into a live cost
+receipt across seven OpenAI, Anthropic, and Google models. You can see where the
+money goes, clean up expensive parts of the prompt, and copy the result into a
+PRD or ticket. The local Quality Lab lets you test a cheaper candidate against
+your own definition of “good enough.”
 
 ![Token Economist](docs/screenshot.png)
 
-## The load-bearing idea
+## A quick example
 
-**Cost is predictable from tokens; quality must be observed.**
+Suppose you're scoping a customer support chatbot for 80,000 conversations a
+month. Pick the support-bot template, paste the draft system prompt, and set the
+expected turns, retrieved context, output length, cache rate, and retries. The
+receipt updates with a monthly range for each model and names the cheapest
+usable starting point.
 
-- The **cost estimate** and the **prompt linter** are free, deterministic, and
-  fully offline — the eval suite proves the entire path runs with networking
-  disabled. Token counts come from an offline BPE (o200k) calibrated per
-  provider; prices come from a maintained table; the output side comes from
-  your stated assumption. Costs are always shown as **ranges** because
-  non-OpenAI tokenizers can only be estimated offline — the range bar is the
-  UI's signature element, not a decoration.
-- The **Quality Lab** is the only part that spends money: explicitly
-  triggered, cost-previewed before the button activates, hard-bounded
-  (≤5 samples × ≤2 models, capped max_tokens), cached so re-runs are free,
-  and reporting per-example outcomes against *your* definition of good
-  enough — not an average, not a leaderboard. Paid calls are available only
-  through a loopback-only local service; a public/static build is estimate-only.
-- Your prompt **never leaves the machine** except when you run the Quality
-  Lab. There is no hosted backend, and provider keys never enter browser code.
+The recommendation starts with an **UNVERIFIED** stamp. If the price looks good,
+run five representative questions through one or two models in Quality Lab.
+The stamp changes only when a candidate passes the check you chose.
+
+## Good fits
+
+| Use case | Question you can answer |
+|---|---|
+| **Customer support chatbot** | What will multi-turn conversations cost at your expected volume, including history growth and retries? |
+| **RAG knowledge assistant** | How much does retrieved context add, and would prompt caching or a smaller context cut the bill? |
+| **Classification or extraction** | Can a fast, low-cost model return the labels or JSON your workflow needs? |
+| **Document summarizer** | How do document length, output caps, and batch pricing change the monthly estimate? |
+| **Tool-using agent** | What do tool payloads, extra turns, and reasoning tokens add to each task? |
+
+The built-in templates give each scenario a sensible starting shape. Replace
+the sample prompt and add your own scale assumptions.
+
+## What comes out of a run
+
+### Cost receipt
+
+Set conversation volume, turns, prompt caching, tool usage, response length,
+retries, and batch work. You can compare per-request and monthly ranges across
+model tiers, then see how much each part of the request contributes.
+
+### Prompt fixes with dollar estimates
+
+The prompt review catches duplicated instructions, filler, bloated few-shot
+examples, missing output caps, unbounded history, and documents that belong in
+retrieval. Each finding shows a token reduction and monthly dollar estimate.
+You can apply supported fixes and let the tokenizer measure the result again.
+
+### Cost card for the PRD
+
+Copy a Markdown cost card with the recommended model, projected spend, quality
+status, and assumptions. Share a browser link when a teammate needs to inspect
+the same scenario. The link stores the prompt in its URL fragment, so treat it
+like any document that contains product work.
+
+### Optional quality check with a spending limit
+
+Define “good enough” as valid JSON, a required phrase, a regex match, or a
+manual judgment. Then run up to five samples on one or two candidate models.
+You see the price before the run, and cached results keep repeat checks from
+spending twice.
+
+Quality Lab runs through a loopback service on your machine. Provider keys stay
+out of the browser and public build. A hosted demo can estimate costs and review
+prompts, but it cannot make paid model calls.
 
 ## Quick start
 
 ```sh
 npm install
-npm run dev      # offline/public-safe mode; Quality Lab makes no paid calls
-npm run eval     # the offline eval suite (see EVAL.md)
+npm run dev      # public-safe estimator; no paid model calls
+npm run eval     # deterministic offline evaluation suite
 npm run build    # production build
 ```
 
-To use the Quality Lab locally:
+To use Quality Lab on your machine:
 
 ```sh
 cp .env.example .env.local
@@ -46,58 +92,41 @@ cp .env.example .env.local
 npm run dev:quality
 ```
 
-The Quality Lab service binds only to `127.0.0.1:8787`. It reads
-`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, and `GEMINI_API_KEY` from the
-process environment or ignored `.env.local`; the browser receives only the
-list of configured providers, never the keys themselves. Restart the command
-after changing `.env.local`.
+The service binds to `127.0.0.1:8787` and reads `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, and `GEMINI_API_KEY` from the process environment or the
+ignored `.env.local` file. Restart the command after you change the file.
 
-## What you get
+## How the estimate works
 
-1. **Cost across models** — per-conversation and per-month ranges for 7 models
-   across 3 providers, modeling the full production request: static prefix +
-   user input + conversation-history growth + tool calls + retries + prompt
-   caching + batch discounts. Assumptions are editable and printed on
-   everything.
-2. **Cost-cut suggestions** — deterministic lint findings, each quantified in
-   tokens and $/month: duplicated instructions, filler phrasing, whitespace
-   bloat, oversized few-shot sets, cacheable static prefixes, missing output
-   caps, inlined data blobs that should be retrieval, unbounded history, and
-   tasks a cheaper tier likely handles. Machine-applicable fixes have an
-   "Apply" button; savings are verified by re-tokenizing, not self-reported.
-3. **Cost card** — a one-screen Markdown artifact (recommended model,
-   projected cost, quality note, assumptions) to paste into a ticket.
-   Recommendations are stamped **UNVERIFIED** until they pass your own
-   quality check.
-4. **Quality Lab** — the opt-in measured half: define "good enough"
-   (valid-JSON / contains / regex / manual judgment), run a handful of samples
-   on 1–2 candidate models using locally configured provider credentials, see
-   per-example outcomes, and let the recommendation flip to the cheapest model
-   that actually passes.
+The free path runs in the browser. Token Economist uses an offline o200k BPE
+count and provider-specific calibration bands. OpenAI counts use the same BPE;
+Anthropic and Google counts remain estimates, so the interface shows a range
+instead of false precision.
+
+You supply the expected output length because no calculator can count a reply
+before the model writes it. The estimator then prices the full request model:
+fixed instructions, user input, conversation history, retrieved data, tools,
+reasoning tokens, caching, retries, and batch discounts.
+
+On load, the app requests a public model price list from OpenRouter. It sends no
+prompt content. If that request fails, the app uses its dated price snapshot
+and tells you which source produced the estimate.
 
 ## Architecture
 
-```
-src/core/        pure TS library, no React, no network on the free path
-  models.ts      pricing/model registry — adding a provider is a config change
-  tokenizer.ts   offline o200k count + per-provider calibration bands
-  estimate.ts    deterministic cost engine (request model in DECISIONS.md D5)
-  lint.ts        heuristic cost linter with measurable `apply` fixes
-  card.ts        Markdown cost card + recommendation policy
-  measure.ts     browser client for the local-only paid-call boundary
-server/          loopback proxy + Anthropic/OpenAI/Google provider adapters
-src/…            React UI over the core library
-tests/           the eval suite (EVAL.md is the scoreboard)
-DECISIONS.md     append-only build log
+```text
+src/core/        deterministic cost, token, lint, share, and card logic
+src/components/  React interface and live decision receipt
+server/          loopback-only Quality Lab provider adapters
+tests/           offline evaluation and boundary tests
+DECISIONS.md     append-only product and engineering decision log
 ```
 
-The estimator is model-agnostic by construction: its registry lives in
-`src/core/models.ts`. The local Quality Lab server uses an explicit model
-allowlist so a browser request cannot turn it into an arbitrary API proxy.
-
-For a reviewer-oriented map of trust boundaries, operational flows, secrets,
-permissions, and test coverage, start with
-[`documentation/architecture.md`](documentation/architecture.md).
+The model registry lives in `src/core/models.ts`. The local service accepts
+allowlisted model and provider pairs, fixed provider endpoints, bounded request
+bodies, and capped output tokens. Start with
+[`documentation/architecture.md`](documentation/architecture.md) for the trust
+boundaries, permissions, and test map.
 
 ## Verification
 
@@ -107,20 +136,16 @@ npm test
 npm run build
 ```
 
-The default suite is deterministic and makes no paid provider calls. Live
-tokenizer calibration remains explicitly opt-in through `npm run eval:live`.
+The default suite makes no paid provider calls. `npm run eval:live` sends test
+fixtures to a provider only when you opt in and supply a key.
+
+## Boundaries
+
+Token Economist supports planning before implementation. Runtime model routing,
+production billing reconciliation, and global quality leaderboards sit outside
+the project. Prices carry a source and date; verify them before you commit a
+production budget.
 
 ## License
 
 MIT
-
-## Honesty notes
-
-- Anthropic/Google token counts are calibrated estimates (documented bands),
-  which is exactly why costs render as ranges. OpenAI counts are exact
-  (same BPE). See `DECISIONS.md` D2 and `EVAL.md`.
-- Prices carry an as-of date and were checked against official provider
-  documentation on 2026-09-01. A live aggregator refresh is labelled with
-  its source; verify numbers again before committing production budget.
-- Not a runtime router, not a billing dashboard, not a prompt optimizer that
-  burns runs, not a model leaderboard — this is a pre-flight check.
