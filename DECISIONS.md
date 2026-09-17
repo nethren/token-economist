@@ -585,3 +585,48 @@ across the stamp, both panels and the Markdown card.
 
 Verification: lint clean, 83 tests passing (5 new), build clean. No paid call
 was made and no pricing changed.
+
+## 2026-09-17 — D26: Quality evidence is brought by the user, not bought by the app
+
+Supersedes the paid path in D13 and the loopback service in D18. The Quality
+Lab used to make real provider calls through a loopback-only Node service that
+held the keys. It was safe, and almost nobody could use it. Trying the feature
+meant cloning the repository, writing an `.env.local`, holding a provider key,
+and starting a second process. A hosted build could not run it at all by
+design, which is exactly where a portfolio project is seen. The most
+interesting half of the product was gated behind a setup ritual.
+
+The app now exports a **check pack**: a Markdown brief carrying the prompt, the
+samples, the pass condition, the reply cap and the instructions. The user runs
+it in whatever AI tool they already pay for, pastes the replies back, and
+`buildPastedRun()` scores them locally with the same `scoreOutput` the paid path
+used. The scoring, the status accounting, the staleness rule and the card are
+unchanged. Only the transport changed: from our process calling a provider, to
+the user's own tool doing it.
+
+What this buys:
+
+- The hosted build is now the complete product. Nothing is disabled in it.
+- No key ever exists, so no key can leak. The strongest form of the D18
+  boundary is not guarding the key, it is not having one.
+- The spend is on the user's account, in their own tool, where they can see it.
+  The app previews the cost and charges nothing.
+
+What it costs, stated plainly: token counts for pasted replies are offline
+estimates rather than provider-reported usage, and the evidence is
+self-reported. The app cannot witness that a reply came from the model it is
+attributed to. So every run carries `source`, the panel says "replies you
+supplied", and the card says the evidence is self-reported. Demo fixtures are
+labelled `demo` and can never render as a measurement. An unverifiable claim
+presented as a measurement would be the same dishonesty the whole quality path
+was built to avoid.
+
+Removed: `server/quality-proxy.mjs`, `server/dev-quality.mjs`, the
+`dev:quality` script, the `/api/quality` Vite proxy, the
+`__QUALITY_LAB_LOCAL__` define, `tests/quality-proxy.test.ts`, and the
+`runMeasurement` / `ResultCache` / provider-adapter layer. The result cache went
+with them: re-scoring pasted text is free, so there is nothing left to cache.
+
+Verification: lint clean, 88 tests passing (5 skipped), build clean. The
+production bundle was grepped for `api/quality`, `QUALITY_LAB`, `loopback`,
+`apiKey` and the dev fixture — zero hits for each.

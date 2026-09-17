@@ -535,13 +535,15 @@ export default function App() {
                   );
                 return (
                   <>
-                    Optional, and a few cents. You can compute cost, but you have to watch quality:
-                    the pick stays <em>unverified</em> until a model passes your own check.
+                    Optional. You can compute cost, but you have to watch quality: the pick stays{" "}
+                    <em>unverified</em> until a model passes your own check. Run it in the AI tool
+                    you already pay for — this app never calls one.
                   </>
                 );
               })()}
             </div>
             <QualityLab
+              featureName={featureName}
               prompt={deferredPrompt}
               runs={runs}
               setRuns={setRuns}
@@ -577,7 +579,7 @@ export default function App() {
               className="chip"
               onClick={updatePrices}
               disabled={priceStatus.kind === "loading"}
-              title={`Downloads today's prices from ${PRICE_SOURCE_NAME} (a public price list). Your prompt is never sent — price refresh is the only automatic network call; the Quality Lab is the only one that ever carries your prompt, and only when you run it.`}
+              title={`Downloads today's prices from ${PRICE_SOURCE_NAME} (a public price list). Your prompt is never sent. This is the only network call the app makes.`}
             >
               refresh
             </button>

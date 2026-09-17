@@ -434,7 +434,7 @@ export function lintPrompt(
           severity: "medium",
           detail:
             `The prompt reads as a bounded classification/extraction-style task with short output — the profile ` +
-            `the cheapest models handle well. Verify with a Quality Lab run (a few samples on both models) before ` +
+            `the cheapest models handle well. Verify it in the Quality Lab (export the check, run a few samples in your own AI tool) before ` +
             `committing; if ${cheapest.model.displayName} passes your check, this is the single largest saving available.`,
           tokensSaved: 0,
           monthlySavingUSD: saving,

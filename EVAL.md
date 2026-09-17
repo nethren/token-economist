@@ -4,10 +4,9 @@ The eval **is** the product claim. Run it with `npm run eval`. Nothing in it
 requires a network connection or an API key except the explicitly opt-in live
 accuracy check.
 
-The interactive Quality Lab is separately opt-in. `npm run dev` never makes
-paid calls; `npm run dev:quality` starts a loopback-only service that reads
-provider keys from the server environment or ignored `.env.local`. The
-browser never handles those credentials.
+The Quality Lab makes no calls at all. It exports a check pack you run in your
+own AI tool and scores the replies you paste back, offline. The app holds no
+provider credential, so there is no paid path in the product to guard.
 
 ## Headline metric
 
@@ -57,5 +56,4 @@ monotonicity.
 ```sh
 npm run eval        # offline suite — must pass with networking disabled
 ANTHROPIC_API_KEY=… npm run eval:live   # opt-in provider-truth check
-npm run dev:quality # opt-in interactive calls through the local service
 ```

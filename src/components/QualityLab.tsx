@@ -1,42 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { MeasureRun, ModelSpec, QualityCheck, SampleResult } from "../core/types";
 import { MODELS } from "../core/models";
 import {
-  MAX_MODELS_PER_RUN,
   MAX_SAMPLES_PER_RUN,
-  getQualityLabStatus,
+  buildPastedRun,
   previewRunCost,
-  runMeasurement,
-  type ResultCache,
+  runFingerprint,
 } from "../core/measure";
+import { renderCheckPack } from "../core/pack";
 import { fmtUSD, summarizeRun } from "../core/card";
-import { runFingerprint } from "../core/measure";
 
-const localCache: ResultCache = {
-  get(key) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? (JSON.parse(raw) as SampleResult) : null;
-    } catch {
-      return null;
-    }
-  },
-  set(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {
-      /* cache is best-effort */
-    }
-  },
-};
-
+/**
+ * Quality Lab — bring your own AI.
+ *
+ * The app exports a check pack, the user runs it in the tool they already pay
+ * for, and the replies come back here to be scored locally. No key, no proxy,
+ * no paid call from this app. Every run is labelled with where the evidence
+ * came from, because "the user told us" and "we measured it" are not the same
+ * claim.
+ */
 export function QualityLab({
+  featureName,
   prompt,
   runs,
   setRuns,
   maxTokens,
   setMaxTokens,
 }: {
+  featureName: string;
   prompt: string;
   runs: MeasureRun[];
   setRuns: (r: MeasureRun[]) => void;
@@ -44,31 +35,13 @@ export function QualityLab({
   maxTokens: number;
   setMaxTokens: (n: number) => void;
 }) {
-  const [selected, setSelected] = useState<string[]>(["claude-haiku-4-5"]);
+  const [modelId, setModelId] = useState("claude-haiku-4-5");
   const [samplesText, setSamplesText] = useState("");
   const [checkKind, setCheckKind] = useState<QualityCheck["kind"]>("json");
   const [checkValue, setCheckValue] = useState("");
-  const [service, setService] = useState<"checking" | "available" | "unavailable">("checking");
-  const [configuredProviders, setConfiguredProviders] = useState<ModelSpec["provider"][]>([]);
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState("");
+  const [outputs, setOutputs] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let current = true;
-    getQualityLabStatus()
-      .then((status) => {
-        if (!current) return;
-        setConfiguredProviders(status.configuredProviders);
-        setService("available");
-      })
-      .catch(() => {
-        if (current) setService("unavailable");
-      });
-    return () => {
-      current = false;
-    };
-  }, []);
 
   const samples = useMemo(
     () =>
@@ -80,68 +53,65 @@ export function QualityLab({
     [samplesText],
   );
 
-  const chosenModels = useMemo(
-    () => selected.slice(0, MAX_MODELS_PER_RUN).map((id) => MODELS.find((m) => m.id === id)!),
-    [selected],
+  const model = useMemo(() => MODELS.find((m) => m.id === modelId) ?? MODELS[0], [modelId]);
+  const check: QualityCheck = { kind: checkKind, value: checkValue || undefined };
+
+  const preview = useMemo(
+    () => previewRunCost(model, prompt, samples, maxTokens).totalUSD,
+    [model, prompt, samples, maxTokens],
   );
 
-  const preview = useMemo(() => {
-    let total = 0;
-    for (const m of chosenModels) {
-      total += previewRunCost(m, prompt, samples, maxTokens).totalUSD;
-    }
-    return total;
-  }, [chosenModels, prompt, samples, maxTokens]);
+  const pack = useMemo(
+    () => renderCheckPack({ featureName, prompt, model, samples, check, maxTokens }),
+    // `check` is rebuilt every render; its parts are the real inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [featureName, prompt, model, samples, checkKind, checkValue, maxTokens],
+  );
 
-  const providersNeeded = [...new Set(chosenModels.map((m) => m.provider))];
-  const providersMissing = providersNeeded.filter((provider) => !configuredProviders.includes(provider));
-  const check: QualityCheck = { kind: checkKind, value: checkValue || undefined };
-  const ready =
-    service === "available" &&
-    samples.length > 0 &&
-    chosenModels.length > 0 &&
-    providersMissing.length === 0 &&
-    !busy;
+  const filled = outputs.filter((o) => o && o.trim().length > 0).length;
+  const canScore = samples.length > 0 && filled > 0;
 
-  const toggleModel = (id: string) => {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(-MAX_MODELS_PER_RUN),
-    );
-  };
-
-  const run = async () => {
-    setBusy(true);
+  const copyPack = async () => {
     setError("");
-    const newRuns: MeasureRun[] = [];
     try {
-      for (const m of chosenModels) {
-        setProgress(`Running ${m.displayName}…`);
-        const r = await runMeasurement({
-          model: m,
-          prompt,
-          samples,
-          check,
-          maxTokens,
-          cache: localCache,
-          onProgress: (done, total) => setProgress(`${m.displayName}: ${done}/${total} samples`),
-        });
-        newRuns.push(r);
-      }
-      // Replace runs for the same models, keep others.
-      const kept = runs.filter((r) => !newRuns.some((n) => n.modelId === r.modelId));
-      setRuns([...kept, ...newRuns]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-      setProgress("");
+      await navigator.clipboard.writeText(pack);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setError("Your browser blocked the clipboard. Use Download instead.");
     }
   };
 
-  const overrideResult = (modelId: string, idx: number, pass: boolean) => {
+  const downloadPack = () => {
+    const blob = new Blob([pack], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `quality-check-${model.id}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const setOutput = (i: number, value: string) => {
+    setOutputs((prev) => {
+      const next = [...prev];
+      while (next.length < samples.length) next.push("");
+      next[i] = value;
+      return next;
+    });
+  };
+
+  const score = () => {
+    setError("");
+    const run = buildPastedRun({ model, prompt, samples, outputs, check, maxTokens });
+    const kept = runs.filter((r) => r.modelId !== run.modelId);
+    setRuns([...kept, run]);
+  };
+
+  const overrideResult = (runModelId: string, idx: number, pass: boolean) => {
     setRuns(
       runs.map((r) =>
-        r.modelId === modelId
+        r.modelId === runModelId
           ? { ...r, results: r.results.map((s, i) => (i === idx ? { ...s, pass } : s)) }
           : r,
       ),
@@ -149,8 +119,8 @@ export function QualityLab({
   };
 
   // Dev-only. Seeds each evidence state so the Lab can be demoed and checked
-  // without contacting a provider. `import.meta.env.DEV` is false in a
-  // production build, so this and its control are dropped from the bundle.
+  // without leaving the page. `import.meta.env.DEV` is false in a production
+  // build, so this and its control are dropped from the bundle.
   const seedDemo = (kind: "passed" | "failed" | "partial" | "stale") => {
     const verdicts: Record<string, (boolean | null)[]> = {
       passed: [true, true, true, true, true],
@@ -166,11 +136,11 @@ export function QualityLab({
       outputTokens: 40,
       costUSD: 0.0002,
       cached: false,
-      latencyMs: 480,
+      latencyMs: 0,
     }));
     setRuns([
       {
-        modelId: selected[0] ?? MODELS[0].id,
+        modelId,
         check,
         results,
         totalCostUSD: 0.001,
@@ -179,6 +149,7 @@ export function QualityLab({
         // configuration, which is what retires the stamp.
         ranAgainst:
           kind === "stale" ? "demo-other-configuration" : runFingerprint(prompt, maxTokens),
+        source: "demo",
       },
     ]);
   };
@@ -186,44 +157,39 @@ export function QualityLab({
   return (
     <div className="panel lab">
       <p className="lab-lead">
-        This opt-in step sends your prompt to a provider and bills its API. Real calls run only
-        through the loopback-only local service.
+        Cost is predictable from tokens. Quality has to be observed. Export the check below, run it
+        in the AI tool you already pay for, and paste the replies back — scoring happens here, on
+        your machine.
       </p>
       <div className="lab-facts">
-        <span>up to {MAX_SAMPLES_PER_RUN} samples × {MAX_MODELS_PER_RUN} models</span>
-        <span>keys never enter the browser</span>
-        <span>results cached, re-runs free</span>
+        <span>no API key, ever</span>
+        <span>your tool, your account</span>
+        <span>replies scored locally</span>
       </div>
 
-      {service === "checking" && <div className="lab-notice">Checking for the local Quality Lab service…</div>}
-      {service === "unavailable" && (
-        <div className="lab-notice">
-          <strong>Quality Lab is local-only.</strong> This build cannot make paid calls. To enable
-          them on your machine, configure <code>.env.local</code> and start{" "}
-          <code>npm run dev:quality</code>.
-        </div>
-      )}
-      {service === "available" && configuredProviders.length === 0 && (
-        <div className="lab-notice">
-          The local service is running, but no provider key is configured. Add one to{" "}
-          <code>.env.local</code>, then restart <code>npm run dev:quality</code>.
-        </div>
-      )}
+      <div className="lab-step">1 · Set up the check</div>
 
-      <div className="field">
-        <span>Models to try (max {MAX_MODELS_PER_RUN})</span>
-        <div className="lab-models">
-          {MODELS.map((m: ModelSpec) => (
-            <label className="checkline" key={m.id}>
-              <input
-                type="checkbox"
-                checked={selected.includes(m.id)}
-                onChange={() => toggleModel(m.id)}
-              />
-              {m.displayName} <span className="hint">{m.provider}</span>
-            </label>
-          ))}
-        </div>
+      <div className="lab-row">
+        <label className="field">
+          <span>Model you will test</span>
+          <select value={modelId} onChange={(e) => setModelId(e.target.value)}>
+            {MODELS.map((m: ModelSpec) => (
+              <option key={m.id} value={m.id}>
+                {m.displayName} ({m.provider})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field lab-cap">
+          <span>Reply cap</span>
+          <input
+            type="number"
+            min={16}
+            max={1024}
+            value={maxTokens}
+            onChange={(e) => setMaxTokens(Number(e.target.value) || 300)}
+          />
+        </label>
       </div>
 
       <label className="field">
@@ -239,52 +205,75 @@ export function QualityLab({
       <div className="lab-row">
         <label className="field">
           <span>Counts as a pass when</span>
-          <select value={checkKind} onChange={(e) => setCheckKind(e.target.value as QualityCheck["kind"])}>
+          <select
+            value={checkKind}
+            onChange={(e) => setCheckKind(e.target.value as QualityCheck["kind"])}
+          >
             <option value="json">reply is valid JSON</option>
             <option value="contains">reply contains…</option>
             <option value="regex">reply matches regex…</option>
             <option value="manual">I judge it myself</option>
           </select>
         </label>
-        <label className="field lab-cap">
-          <span>Reply cap</span>
-          <input
-            type="number"
-            min={16}
-            max={1024}
-            value={maxTokens}
-            onChange={(e) => setMaxTokens(Number(e.target.value) || 300)}
-          />
-        </label>
+        {(checkKind === "contains" || checkKind === "regex") && (
+          <label className="field">
+            <span>{checkKind === "contains" ? "Required text" : "Regex pattern"}</span>
+            <input type="text" value={checkValue} onChange={(e) => setCheckValue(e.target.value)} />
+          </label>
+        )}
       </div>
-      {(checkKind === "contains" || checkKind === "regex") && (
-        <label className="field">
-          <span>{checkKind === "contains" ? "Required text" : "Regex pattern"}</span>
-          <input type="text" value={checkValue} onChange={(e) => setCheckValue(e.target.value)} />
-        </label>
-      )}
+
+      <div className="lab-step">2 · Run it in your own AI tool</div>
 
       <div className="cost-preview">
-        Worst case <strong>{fmtUSD(preview)}</strong> for {samples.length}{" "}
-        {samples.length === 1 ? "sample" : "samples"} × {chosenModels.length}{" "}
-        {chosenModels.length === 1 ? "model" : "models"}, replies capped at {maxTokens} tokens.
+        Running this will cost about <strong>{fmtUSD(preview)}</strong> on your account, for{" "}
+        {samples.length} {samples.length === 1 ? "sample" : "samples"} with replies capped at{" "}
+        {maxTokens} tokens. Token Economist charges nothing and calls nothing.
       </div>
 
-      <button className="btn spend" disabled={!ready} onClick={run}>
-        {busy ? progress || "Running…" : `Run check · ${fmtUSD(preview)}`}
-      </button>
-      {service === "available" && providersMissing.length > 0 && samples.length > 0 && (
-        <span className="hint">
-          {" "}
-          Add {providersMissing.map((provider) => `${provider.toUpperCase()} API key`).join(" and ")} to{" "}
-          <code>.env.local</code>, then restart the local service.
-        </span>
-      )}
+      <div className="lab-actions">
+        <button className="btn primary" disabled={samples.length === 0} onClick={copyPack}>
+          {copied ? "Copied" : "Copy check pack"}
+        </button>
+        <button className="btn" disabled={samples.length === 0} onClick={downloadPack}>
+          Download .md
+        </button>
+      </div>
+      <p className="hint">
+        Paste it into Claude, ChatGPT, Cursor, or anything else. The pack carries the prompt, the
+        samples, the reply cap, and the instructions.
+      </p>
       {error && <div className="lab-error">{error}</div>}
+
+      {samples.length > 0 && (
+        <>
+          <div className="lab-step">3 · Paste the replies back</div>
+          {samples.map((s, i) => (
+            <label className="field" key={i}>
+              <span>
+                Reply to sample {i + 1} <span className="hint">{s.slice(0, 60)}</span>
+              </span>
+              <textarea
+                style={{ minHeight: 64 }}
+                value={outputs[i] ?? ""}
+                onChange={(e) => setOutput(i, e.target.value)}
+                placeholder="Paste what the model replied…"
+              />
+            </label>
+          ))}
+          <button className="btn primary" disabled={!canScore} onClick={score}>
+            Score {filled} {filled === 1 ? "reply" : "replies"}
+          </button>
+          <p className="hint">
+            Blank boxes stay unreviewed rather than counting as failures. Token counts here are
+            offline estimates; your provider dashboard has the billed truth.
+          </p>
+        </>
+      )}
 
       {import.meta.env.DEV && (
         <div className="lab-demo">
-          <span className="hint">Demo data (dev only, no provider call):</span>
+          <span className="hint">Demo data (dev only, labelled as demo):</span>
           {(["passed", "failed", "partial", "stale"] as const).map((k) => (
             <button key={k} className="btn small" onClick={() => seedDemo(k)}>
               {k}
@@ -308,8 +297,7 @@ export function QualityLab({
               </span>{" "}
               <span className="hint">
                 {st.unreviewed > 0 ? `${st.unreviewed} unreviewed · ` : ""}
-                {fmtUSD(r.totalCostUSD)} spent
-                {r.results.some((s) => s.cached) ? ", some cached" : ""}
+                {r.source === "demo" ? "demo data, not real evidence" : "replies you supplied"}
                 {stale ? " · stale, configuration changed" : ""}
               </span>
             </h3>
@@ -317,8 +305,8 @@ export function QualityLab({
               <thead>
                 <tr>
                   <th>Input</th>
-                  <th>Output</th>
-                  <th>Tokens in/out</th>
+                  <th>Reply</th>
+                  <th>Est. tokens in/out</th>
                   <th>Verdict</th>
                 </tr>
               </thead>
@@ -336,10 +324,16 @@ export function QualityLab({
                       {s.pass === null && (
                         <span>
                           <span className="pending">judge: </span>
-                          <button className="btn small" onClick={() => overrideResult(r.modelId, i, true)}>
+                          <button
+                            className="btn small"
+                            onClick={() => overrideResult(r.modelId, i, true)}
+                          >
                             pass
                           </button>{" "}
-                          <button className="btn small" onClick={() => overrideResult(r.modelId, i, false)}>
+                          <button
+                            className="btn small"
+                            onClick={() => overrideResult(r.modelId, i, false)}
+                          >
                             fail
                           </button>
                         </span>

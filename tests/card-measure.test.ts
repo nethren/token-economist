@@ -3,7 +3,14 @@ import { recommend, renderCard, fmtUSD } from "../src/core/card";
 import { estimateAll } from "../src/core/estimate";
 import { MODELS, getModel } from "../src/core/models";
 import { DEFAULT_ASSUMPTIONS, type MeasureRun } from "../src/core/types";
-import { previewRunCost, scoreOutput, cacheKey, MAX_SAMPLES_PER_RUN } from "../src/core/measure";
+import {
+  buildPastedRun,
+  previewRunCost,
+  runFingerprint,
+  scoreOutput,
+  MAX_SAMPLES_PER_RUN,
+} from "../src/core/measure";
+import { renderCheckPack } from "../src/core/pack";
 import { BLOATED_PROMPT } from "./fixtures";
 
 const fakeRun = (modelId: string, passes: boolean[]): MeasureRun => ({
@@ -22,6 +29,7 @@ const fakeRun = (modelId: string, passes: boolean[]): MeasureRun => ({
   totalCostUSD: 0.005,
   ranAt: "2026-07-12T00:00:00Z",
   ranAgainst: "fp",
+  source: "byo",
 });
 
 describe("recommendation policy", () => {
@@ -104,6 +112,122 @@ describe("cost card", () => {
     expect(card).toContain("valid JSON check");
     expect(card).toContain("No model was called to produce this card");
   });
+
+  it("attributes quality evidence to the author rather than to the tool", () => {
+    const estimates = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, MODELS);
+    const card = renderCard({
+      featureName: "Ticket classifier",
+      prompt: BLOATED_PROMPT,
+      estimates,
+      assumptions: DEFAULT_ASSUMPTIONS,
+      findings: [],
+      runs: [fakeRun("claude-haiku-4-5", [true, true, true])],
+      recommendation: recommend(estimates, [], "fp"),
+      currentFingerprint: "fp",
+      generatedAt: "2026-07-12",
+    });
+    expect(card).toContain("replies supplied by the author");
+    expect(card).toContain("Quality evidence is self-reported");
+  });
+
+  it("marks demo data as demo data, so it can never pass as a measurement", () => {
+    const estimates = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, MODELS);
+    const demo: MeasureRun = { ...fakeRun("claude-haiku-4-5", [true, true, true]), source: "demo" };
+    const card = renderCard({
+      featureName: "Ticket classifier",
+      prompt: BLOATED_PROMPT,
+      estimates,
+      assumptions: DEFAULT_ASSUMPTIONS,
+      findings: [],
+      runs: [demo],
+      recommendation: recommend(estimates, [demo], "fp"),
+      currentFingerprint: "fp",
+      generatedAt: "2026-07-12",
+    });
+    expect(card).toContain("demo data, not a measurement");
+    // The self-reported footnote would contradict the line above it.
+    expect(card).toContain("This card carries demo data only");
+    expect(card).not.toContain("Quality evidence is self-reported");
+  });
+});
+
+/**
+ * Quality evidence is brought by the user: the app exports a check pack, the
+ * user runs it in their own AI tool, and the replies come back to be scored
+ * offline. Nothing here may call a provider or imply the tool did.
+ */
+describe("bring-your-own-AI evidence", () => {
+  const m = getModel("claude-haiku-4-5");
+  const samples = ["ticket one", "ticket two", "ticket three"];
+  const build = (outputs: string[], maxTokens = 300) =>
+    buildPastedRun({
+      model: m,
+      prompt: BLOATED_PROMPT,
+      samples,
+      outputs,
+      check: { kind: "json" },
+      maxTokens,
+    });
+
+  it("scores pasted replies locally and labels the evidence as user-supplied", () => {
+    const run = build(['{"a":1}', "not json", ""]);
+    expect(run.source).toBe("byo");
+    expect(run.results.map((r) => r.pass)).toEqual([true, false, null]);
+  });
+
+  it("treats a blank box as missing evidence, not as a failure", () => {
+    const run = build(["", "", ""]);
+    expect(run.results.every((r) => r.pass === null)).toBe(true);
+    expect(run.results.every((r) => r.outputTokens === 0)).toBe(true);
+    expect(run.totalCostUSD).toBe(0);
+  });
+
+  it("binds the run to the prompt and reply cap it was collected against", () => {
+    expect(build(["{}", "{}", "{}"]).ranAgainst).toBe(runFingerprint(BLOATED_PROMPT, 300));
+    expect(build(["{}", "{}", "{}"], 400).ranAgainst).toBe(runFingerprint(BLOATED_PROMPT, 400));
+  });
+
+  it("honours the sample cap however many are pasted in", () => {
+    const many = Array.from({ length: 20 }, (_, i) => `sample ${i}`);
+    const run = buildPastedRun({
+      model: m,
+      prompt: "short prompt",
+      samples: many,
+      outputs: many.map(() => "{}"),
+      check: { kind: "json" },
+      maxTokens: 300,
+    });
+    expect(run.results).toHaveLength(MAX_SAMPLES_PER_RUN);
+  });
+});
+
+describe("check pack", () => {
+  const m = getModel("claude-haiku-4-5");
+  const pack = renderCheckPack({
+    featureName: "Ticket classifier",
+    prompt: BLOATED_PROMPT,
+    model: m,
+    samples: ["ticket one", "ticket two"],
+    check: { kind: "json" },
+    maxTokens: 300,
+  });
+
+  it("carries everything needed to reproduce the check elsewhere", () => {
+    expect(pack).toContain(m.displayName);
+    expect(pack).toContain("ticket one");
+    expect(pack).toContain("ticket two");
+    expect(pack).toContain("valid JSON");
+    expect(pack).toContain("300 tokens");
+    expect(pack).toContain(BLOATED_PROMPT.trim().slice(0, 40));
+  });
+
+  it("is bound to the configuration it was generated from", () => {
+    expect(pack).toContain(runFingerprint(BLOATED_PROMPT, 300));
+  });
+
+  it("states that the cost lands on the user's own account", () => {
+    expect(pack).toContain("on your account");
+  });
 });
 
 describe("Tier-2 guardrails (no network in these tests)", () => {
@@ -130,12 +254,6 @@ describe("Tier-2 guardrails (no network in these tests)", () => {
     expect(scoreOutput('```json\n{"a": 1}\n```', { kind: "json" })).toBe(true);
     expect(scoreOutput("nope", { kind: "json" })).toBe(false);
     expect(scoreOutput("anything", { kind: "manual" })).toBe(null);
-  });
-
-  it("cache keys are stable and input-sensitive", () => {
-    const k1 = cacheKey("m", "p", "s", 100);
-    expect(cacheKey("m", "p", "s", 100)).toBe(k1);
-    expect(cacheKey("m", "p", "s2", 100)).not.toBe(k1);
   });
 
   it("fmtUSD renders sensible magnitudes", () => {

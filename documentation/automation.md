@@ -1,62 +1,55 @@
 # Quality Lab automation
 
-The project does not embed an autonomous agent. Its only LLM workflow is the
-user-triggered Quality Lab, documented here because it reaches paid external
-APIs and evaluates model output.
+The project embeds no autonomous agent and makes no LLM call. This document
+exists because the Quality Lab *evaluates* model output, which reviewers
+reasonably expect to be an AI surface. It is not one.
 
 ## Trigger and owner
 
-- **Owner:** The local user and their provider accounts.
-- **Trigger:** Explicit click on the cost-labelled “Run check” button.
-- **Automatic behavior:** None. Service-status detection is automatic, but it
-  cannot invoke a model.
+- **Owner:** The user and their own AI tool and provider account.
+- **Trigger:** Explicit click to export a check pack, then an explicit click to
+  score the replies pasted back.
+- **Automatic behavior:** None. Nothing runs in the background, on a schedule,
+  or on page load, and no code path in this repository can invoke a model.
 
 ## Inputs
 
 - User-entered system prompt.
 - Up to five user-entered test samples.
-- Up to two selected models.
-- A 16–1024 output-token cap.
+- One selected model, named in the pack so the user knows what to run.
+- A 16–1024 reply cap, carried into the pack as an instruction.
 - A deterministic check: valid JSON, contains, regex, or manual judgment.
+- The replies the user pastes back.
 
 ## Tool/API surface
 
-The service may call exactly these API families:
-
-- Anthropic Messages
-- OpenAI Chat Completions
-- Google Gemini `generateContent`
-
-Provider and model identifiers must match the server allowlist. The request
-cannot supply an upstream URL, headers, API key, or arbitrary provider
-options.
+None. The application has no provider client, no credential, and no outbound
+request other than the fixed public price list. The model call happens in the
+user's own tool, outside this system's boundary.
 
 ## Steering versus hard guardrails
 
-The user’s prompt and sample steer model behavior. They do not control the
-service. Hard guardrails outside the prompt enforce:
+The prompt and samples steer the model in the user's tool. They steer nothing
+here. The guardrails that apply locally:
 
-- loopback-only listener and fixed Vite port;
-- ephemeral Vite-to-service token;
-- local-origin/host validation;
-- JSON and 64 KiB request-body limit;
-- provider/model allowlist;
-- prompt and sample character limits;
-- output-token cap and provider timeout;
-- no automatic retries;
-- no server-side persistence or logging of prompts and outputs.
+- five-sample cap and a 1024-token hard ceiling on the reply cap;
+- pasted text is scored, never evaluated or executed;
+- a blank reply stays unreviewed and can never count as a pass or a failure;
+- a run is bound to the prompt and cap it was collected against, so editing
+  either one retires the evidence instead of silently keeping the stamp;
+- demo fixtures carry `source: "demo"` and can never render as a measurement;
+- no persistence beyond the session and no logging of prompts or replies.
 
 ## Output contract and failure handling
 
-The service returns `text`, `inputTokens`, and `outputTokens`. The
-browser validates those types, calculates cost from the active price table,
-and evaluates the configured check. Provider or network errors surface to the
-user and do not produce a passing result.
+`buildPastedRun()` returns a `MeasureRun`: per-sample verdict, estimated token
+counts, estimated cost, `ranAgainst`, and `source`. Token counts for pasted
+replies are offline estimates, and the evidence is self-reported — the app
+cannot witness that a reply came from the model it is attributed to. Both
+limits are stated in the interface and on the exported card.
 
 ## Side effects and controls
 
-The provider call and its billing are the only external side effects. The UI
-previews a worst-case estimate before enabling the action, caps each run, and
-caches completed samples to avoid accidental repeat spend. Stopping the local
-launcher is the kill switch. There is no background execution, scheduled
-retry, or model tool-calling.
+A clipboard write or a file download. That is the complete list. The panel
+previews what running the pack will cost on the user's own account, and the app
+charges nothing and calls nothing. Closing the tab is the kill switch.

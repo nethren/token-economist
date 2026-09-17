@@ -1,8 +1,10 @@
 # Test coverage
 
-The default deterministic gate is `npm test`: 60 tests pass across six test
-files. Five provider-truth tests are skipped unless
-`ANTHROPIC_API_KEY` is deliberately supplied.
+The default deterministic gate is `npm test`: 88 tests pass across six test
+files. Five provider-truth tests are skipped unless `ANTHROPIC_API_KEY` is
+deliberately supplied. Nothing in the application can contact a model provider,
+so `eval:live` is the only path in the repository that reaches one, and it hits
+a free token-counting endpoint.
 
 There is no CI workflow or protected-branch status check yet. “Existing”
 below means a test is present in this repository, not that GitHub currently
@@ -22,34 +24,35 @@ enforces it.
 | Evidence staleness | A run carries the fingerprint of the prompt and reply cap it measured; once either changes the run reports as stale, never as passed, failed or missing, and the card marks it | A run verifying against a configuration it never measured fails | `tests/quality-status.test.ts` | Unit | Existing |
 | Share link | State round-trips in a URL-safe fragment; garbage and unknown fields fail safely | Invalid input returns null/defaults instead of throwing | `flows.md` §3; `tests/improvements.test.ts` | Unit | Existing |
 | Price refresh | Only valid positive mapped prices apply; malformed/missing rows preserve snapshots; cache and offline fallback behave | Corrupt cache or payload cannot replace registry values | `flows.md` §2; `tests/improvements.test.ts` | Unit | Existing |
-| Browser credential boundary | Browser completion request contains provider/model/prompt/sample/cap but no credential header or key field | Any API-key material in the request fails | `variables.md`; `tests/quality-proxy.test.ts` | Unit | Existing |
-| Paid-request validation | Provider/model mismatch and an excessive output cap are rejected | Unknown pair or cap over 1,024 throws before a provider call | `flows.md` §4; `tests/quality-proxy.test.ts` | Unit | Existing |
-| Environment parsing | Local key file is parsed as data, not evaluated | Comments/exports/quotes parse without executing content | `variables.md`; `tests/quality-proxy.test.ts` | Unit | Existing |
+| Bring-your-own evidence | Pasted replies are scored offline, labelled `source: "byo"`, and bound to the prompt and cap they were collected against | A run that verifies a configuration it never saw, or loses its provenance, fails | `flows.md` §4; `tests/card-measure.test.ts` | Unit | Existing |
+| Missing evidence stays missing | A blank reply box is unreviewed, contributes no tokens and no cost | A blank box counting as a pass or a failure fails | `tests/card-measure.test.ts` | Unit | Existing |
+| Check-pack completeness | The pack carries the prompt, samples, check name, reply cap, configuration fingerprint, and the user's own estimated spend | A pack that cannot reproduce the check elsewhere fails | `src/core/pack.ts`; `tests/card-measure.test.ts` | Unit | Existing |
+| Provenance on the card | The card attributes evidence to the author and marks demo data as demo data | Demo data rendering as a measurement fails | `tests/card-measure.test.ts` | Unit | Existing |
 | Provider token calibration | Anthropic truth falls inside the band and point error is within ±12% | Out-of-band counts fail | `EVAL.md`; `tests/live-accuracy.test.ts` | Guarded live | Existing, opt-in |
 
 ## Proposed tests
 
 | Proposed case | Assertion and negative case | Type |
 |---|---|---|
-| Loopback authorization integration | Start the service with a test token; authorized Vite-style request returns status, while missing token, direct request, foreign origin, wrong host, and wrong port return 403 | Integration, deterministic |
-| Request-body boundary integration | Oversized body returns 413; wrong content type returns 415; invalid JSON returns 400; provider fetch stub records zero calls | Integration, deterministic |
-| Missing-key fail closed | Allowlisted request without its provider key returns 503 and never calls `fetch` | Integration, deterministic |
-| Registry/allowlist parity | Every Quality Lab model appears in the server allowlist with the same provider, and no extra allowlist model exists | Unit |
+| No-provider-client guard | Assert the built bundle contains no provider hostname, `Authorization` header construction, or API-key identifier; a reintroduced paid path fails the build gate | Unit, on `dist` |
 | Price-fetch privacy | Stub `fetch` and assert the fixed URL, GET semantics, and absence of prompt/sample data | Unit |
-| Public-build paid-call state | Render without a local status route and assert the paid button cannot enable | Integration, deterministic |
-| Provider adapter contract | With test credentials and fixtures, each provider returns text and numeric usage through the full local route | Guarded live |
+| Check-pack round trip | Parse an exported pack, confirm its fingerprint matches the live configuration, and confirm an edited prompt makes the pasted run stale | Unit |
+| Dev-fixture absence | Render a production build and assert the demo controls are not present | Integration, deterministic |
 | Keyboard, contrast, and responsive layout | Validate critical workflows at desktop and 390 px, both themes, reduced motion, and keyboard-only use | Manual |
 
 ## Gaps — documented but unverified
 
-1. **Paid-boundary wiring:** token/origin/body-limit enforcement is verified by
-   code review and a manual loopback smoke test, but not yet by a committed
-   deterministic integration test.
-2. **Provider compatibility:** default CI never calls external providers, so
-   API response-shape drift for Anthropic, OpenAI, and Google remains guarded
-   live coverage.
-3. **Public UI state:** the browser request boundary is unit-tested, but the
-   disabled local-only presentation in a static build has no component test.
+1. **Self-reported evidence:** the app cannot verify that a pasted reply came
+   from the model it is attributed to. This is a property of the design, not a
+   missing test. It is mitigated by labelling — `source` on every run, "replies
+   you supplied" in the panel, and a self-reported note on the card — rather
+   than by a check that cannot exist.
+2. **Estimated usage on pasted replies:** token counts for pasted text come
+   from the offline tokenizer, not from provider-reported usage, so they carry
+   the same calibration error as the rest of the estimate. Labelled as
+   estimates in the results table.
+3. **No-paid-path guard:** the absence of a provider client is verified by
+   grepping `dist` by hand, not by a committed test.
 4. **Accessibility and visual quality:** documented design checks remain
    manual because the repository has no browser test harness.
 5. **Bundle budget:** production build reports size, but no automated threshold
@@ -96,6 +99,24 @@ it was a measurement taken mid colour-transition, not a real state.
    state, including the STALE marker. The fixture is gated on
    `import.meta.env.DEV` and is absent from production builds.
 3. TE-03, TE-04 and TE-05 are not implemented.
+
+## Bring-your-own-AI verification record (D26, 2026-09-17)
+
+**Tested.** `npm run lint` (0 warnings, 0 errors), `npm test` (88 passed, 5
+skipped), `npm run build` — all green, on an isolated copy of the repository.
+Ten new tests cover pasted-reply scoring, blank-box handling, fingerprint
+binding, the sample cap, check-pack contents, and provenance on the card.
+
+**Removed with the paid path.** `tests/quality-proxy.test.ts` and its three
+coverage rows. They tested a loopback service, an ephemeral proxy token, and an
+environment-file parser that no longer exist. Deleting a test because the risk
+it guarded was designed out is not a coverage regression; keeping it would have
+been theatre.
+
+**Paid-path absence checked by hand.** The production bundle was grepped for
+`api/quality`, `x-quality-lab-proxy-token`, `QUALITY_LAB`, `dev:quality`,
+`loopback`, `apiKey`, and the dev fixture markers `seedDemo` and `Demo data`.
+Zero hits for each. This should become a committed test; see Proposed tests.
 
 ## Recommended CI gate
 

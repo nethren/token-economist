@@ -83,7 +83,7 @@ export function applyLivePrices(
   return { models: next, updated, missing, fetchedAt };
 }
 
-/** The only network call in the codebase outside the Quality Lab. */
+/** The only network call in the codebase. */
 export async function fetchLivePrices(models: ModelSpec[]): Promise<LivePriceResult> {
   const res = await fetch(PRICE_SOURCE_URL, { headers: { accept: "application/json" } });
   if (!res.ok) throw new Error(`Price source responded ${res.status}`);

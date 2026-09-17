@@ -16,8 +16,8 @@ and want the assumptions stated.
 
 A design-time pre-flight check: paste the prompt, state the scale, get an
 honest cost range across model tiers, concrete quantified ways to make it
-cheaper, and (opt-in, for a previewed few cents) measured evidence that the
-cheap model is good enough. Success = a PM goes from pasted prompt to a
+cheaper, and (opt-in) evidence from a check you run in your own AI tool that
+the cheap model is good enough. Success = a PM goes from pasted prompt to a
 defensible model-and-cost decision they trust enough to put in the ticket,
 in under five minutes.
 
@@ -35,8 +35,10 @@ apology. Tokens are always translated into words, pages, and dollars.
   the user's own check, never a global score.
 - False precision: single-point cost figures, "exact" token counts for
   providers whose tokenizers we can only estimate.
-- Anything that hides spend: the one paid action is loudly labeled and
-  cost-previewed before it can be clicked.
+- Anything that hides spend. The tool spends nothing at all; where a check
+  would cost money on the user's own account, it says so before they run it.
+- Borrowed credibility: evidence the user supplied is labelled as theirs, and
+  demo data is labelled as demo data.
 
 ## Design Principles
 

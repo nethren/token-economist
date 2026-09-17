@@ -3,33 +3,33 @@
 ## Identity model
 
 Token Economist has no accounts, organizations, roles, claims, database, or
-row-level security. It is a single-user browser application. “Local user”
-means the person controlling the browser profile and provider credentials on
-the machine.
+row-level security. It is a single-user browser application with no server
+component. “User” means the person controlling the browser tab.
 
-The Quality Lab’s ephemeral proxy token authorizes Vite—not a human
-identity—to reach the loopback service during one local run.
+The application holds no provider credential, so there is no privileged
+operation for a permission model to gate.
 
 ## Resource and operation matrix
 
-| Resource / operation | Public visitor | Local user | Vite process | Loopback service |
-|---|---:|---:|---:|---:|
-| Run offline estimate | Allowed | Allowed | N/A | N/A |
-| Fetch public price list | Allowed from browser | Allowed | N/A | N/A |
-| Create a prompt-bearing share link | Allowed after explicit click | Allowed after explicit click | N/A | N/A |
-| Read provider-key values | Denied | May edit local environment file | Denied in browser/client bundle | Allowed in process memory |
-| View configured provider names | Only through local Vite route | Allowed | Proxies authorized status | Returns names, never values |
-| Trigger a paid completion | Unavailable in static build | Allowed after explicit click and preview | Adds ephemeral authorization | Validates and calls allowlisted provider |
-| Choose arbitrary upstream URL/model | Denied | Denied | Denied | Denied by fixed endpoints and allowlist |
-| Persist quality results | Browser origin only | Browser origin only | N/A | Does not persist |
+Every visitor is the same principal, whether the app is running locally or from
+a static deployment. That is the point of the design, not an oversight.
+
+| Resource / operation | Any user | Notes |
+|---|---:|---|
+| Run offline estimate | Allowed | Pure local computation |
+| Fetch public price list | Allowed | Fixed model-list URL; carries no user content |
+| Create a prompt-bearing share link | Allowed after explicit click | Prompt travels in the URL fragment by design |
+| Export a check pack | Allowed after explicit click | Copy or download; contains the prompt and samples |
+| Paste replies and score them | Allowed | Scored offline; blank boxes stay unreviewed |
+| Trigger a paid completion | Not possible | The app has no provider client and no key |
+| Read a provider-key value | Not possible | No key is read, stored, or transmitted anywhere |
 
 ## Enforcement locations
 
-- UI run-size and spend preview: `src/components/QualityLab.tsx`
-- Browser request shape and per-run cache: `src/core/measure.ts`
-- Process token injection: `server/dev-quality.mjs` and `vite.config.ts`
-- Server-side local authorization, validation, allowlist, and paid calls:
-  `server/quality-proxy.mjs`
+- Run size, sample cap, and cost preview: `src/components/QualityLab.tsx`,
+  `src/core/measure.ts`
+- Check-pack contents and configuration binding: `src/core/pack.ts`
+- Evidence status, staleness, and provenance labelling: `src/core/card.ts`
 - Secret exclusion from version control: `.gitignore`
 
 There are no database tables and no RLS/code-enforced row filters.

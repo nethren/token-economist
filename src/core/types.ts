@@ -192,4 +192,11 @@ export interface MeasureRun {
    * never saw.
    */
   ranAgainst: string;
+  /**
+   * Where this evidence came from. "byo" means the user ran the check in their
+   * own AI tool and pasted the replies back; "demo" is sample data for showing
+   * the feature. The app never calls a model, so there is no such thing as a
+   * first-party measurement here, and the card says so.
+   */
+  source: "byo" | "demo";
 }

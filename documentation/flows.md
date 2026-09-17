@@ -58,30 +58,32 @@ state; malformed fields fall back to defaults.
 
 ## 4. Run a Quality Lab check
 
-**Actor:** Local browser user
-**Preconditions:** The user started `npm run dev:quality`, configured at
-least one provider key, selected 1–2 models and 1–5 samples, reviewed the
-worst-case cost, and clicked the paid action
-**Outcome:** Per-sample output, token usage, cost, latency, and a pass/fail or
-manual verdict.
+**Actor:** Any user, in any build
+**Preconditions:** A prompt, a chosen model, 1–5 samples, and a pass condition.
+No credential and no local service.
+**Outcome:** A scored `MeasureRun` labelled `source: "byo"`, bound to the
+prompt and reply cap it was collected against.
 
-1. The launcher generates an ephemeral proxy token and starts Vite plus the
-   loopback service.
-2. The browser checks service status through Vite; it receives provider names,
-   never key values.
-3. After the explicit click, the browser sends one completion request per
-   uncached sample.
-4. Vite adds the ephemeral token. The local service rejects direct,
-   foreign-origin, missing-token, non-JSON, oversized, unknown-model, and
-   over-cap requests.
-5. The service reads the selected provider key from process environment or
-   ignored `.env.local` and calls a fixed HTTPS endpoint.
-6. The browser scores the returned text against the user’s selected rule and
-   caches the result in `localStorage`.
+1. The user picks the model, samples, pass condition, and reply cap. The panel
+   shows what running it will cost on the user's own account.
+2. On an explicit click, `renderCheckPack()` produces a Markdown brief carrying
+   the prompt, the samples, the pass condition, the cap, and the configuration
+   fingerprint. The user copies or downloads it.
+3. The user runs the pack in whatever AI tool they already pay for. That
+   exchange is between them and their provider; this app is not in it.
+4. The user pastes each reply into the matching box.
+5. `buildPastedRun()` scores each reply offline with `scoreOutput`, estimates
+   tokens with the bundled tokenizer, and stamps `ranAgainst` and `source`.
 
-**Trust crossings:** Browser → Vite → loopback service → paid provider.
-**Side effects:** Provider billing, prompt disclosure to the chosen provider,
-and local result-cache writes.
-**Failure behavior:** Fail closed before the provider call when local
-authorization or request validation fails. Provider/network errors return a
-bounded error message and do not silently mark a sample as passed.
+**Trust crossings:** Browser → check pack (only when the user moves it) →
+user's own AI tool → pasted text back into the browser.
+**Side effects:** Clipboard write or a file download. No billing, no request.
+**Failure behavior:** A blank box stays unreviewed rather than counting as a
+failure, so an unfinished paste can never certify a model. A clipboard block
+falls back to the download button. Editing the prompt or the cap invalidates
+the run through the fingerprint rather than silently keeping the stamp.
+
+**Known limitation, stated in the product:** the app cannot witness that a
+pasted reply came from the model it is attributed to, and its token counts for
+pasted text are estimates. The run is labelled self-reported everywhere it is
+shown, including on the exported card.

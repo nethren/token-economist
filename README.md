@@ -63,37 +63,33 @@ status, and assumptions. Share a browser link when a teammate needs to inspect
 the same scenario. The link stores the prompt in its URL fragment, so treat it
 like any document that contains product work.
 
-### Optional quality check with a spending limit
+### Optional quality check, run in your own AI tool
 
-Define “good enough” as valid JSON, a required phrase, a regex match, or a
-manual judgment. Then run up to five samples on one or two candidate models.
-You see the price before the run, and cached results keep repeat checks from
-spending twice.
+Cost is predictable from tokens. Quality has to be observed. Define “good
+enough” as valid JSON, a required phrase, a regex match, or a manual judgment,
+and Token Economist exports a **check pack**: a Markdown brief holding the
+prompt, the samples, the pass condition, and the reply cap.
 
-Quality Lab runs through a loopback service on your machine. Provider keys stay
-out of the browser and public build. A hosted demo can estimate costs and review
-prompts, but it cannot make paid model calls.
+Run that pack wherever you already pay for a model — Claude, ChatGPT, Cursor,
+anything. Paste the replies back and the app scores them locally, then folds
+the result into the recommendation and the cost card.
+
+No API key ever enters this app, because it never calls a provider. The spend
+stays on your own account, in your own tool, and the app previews it first. The
+hosted build is the complete product: nothing is disabled in it.
+
+Evidence is labelled as what it is. Runs carry their source, the card states
+that quality evidence is self-reported, and a run stops counting the moment you
+edit the prompt or the reply cap it was collected against.
 
 ## Quick start
 
 ```sh
 npm install
-npm run dev      # public-safe estimator; no paid model calls
+npm run dev      # the whole app; it never makes a paid model call
 npm run eval     # deterministic offline evaluation suite
 npm run build    # production build
 ```
-
-To use Quality Lab on your machine:
-
-```sh
-cp .env.example .env.local
-# Add one or more provider keys to .env.local
-npm run dev:quality
-```
-
-The service binds to `127.0.0.1:8787` and reads `ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, and `GEMINI_API_KEY` from the process environment or the
-ignored `.env.local` file. Restart the command after you change the file.
 
 ## How the estimate works
 
@@ -114,16 +110,15 @@ and tells you which source produced the estimate.
 ## Architecture
 
 ```text
-src/core/        deterministic cost, token, lint, share, and card logic
+src/core/        deterministic cost, token, lint, share, card, and check-pack logic
 src/components/  React interface and live decision receipt
-server/          loopback-only Quality Lab provider adapters
 tests/           offline evaluation and boundary tests
 DECISIONS.md     append-only product and engineering decision log
 ```
 
-The model registry lives in `src/core/models.ts`. The local service accepts
-allowlisted model and provider pairs, fixed provider endpoints, bounded request
-bodies, and capped output tokens. Start with
+The model registry lives in `src/core/models.ts`, and the check pack in
+`src/core/pack.ts`. There is no server directory, because there is no server.
+Start with
 [`documentation/architecture.md`](documentation/architecture.md) for the trust
 boundaries, permissions, and test map.
 

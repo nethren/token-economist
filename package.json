@@ -11,7 +11,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:quality": "node server/dev-quality.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",

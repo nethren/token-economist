@@ -38,6 +38,7 @@ const run = (
   totalCostUSD: 0.005,
   ranAt: "2026-09-15T00:00:00Z",
   ranAgainst: "fp",
+  source: "byo",
 });
 
 const estimates = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, MODELS);

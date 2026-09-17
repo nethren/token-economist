@@ -2,29 +2,33 @@
 
 ## Inventory
 
+The application has no secrets. It never calls a model provider, so it holds no
+provider credential in any form.
+
 | Name | Used by | Scope | Source | Rotation | Risk |
 |---|---|---|---|---|---|
-| `ANTHROPIC_API_KEY` | Local Quality Lab service | Server process only | Shell environment or ignored `.env.local` | Revoke/replace in Anthropic console; restart local service | Paid usage and provider-account access |
-| `OPENAI_API_KEY` | Local Quality Lab service | Server process only | Shell environment or ignored `.env.local` | Revoke/replace in OpenAI console; restart local service | Paid usage and provider-account access |
-| `GEMINI_API_KEY` | Local Quality Lab service | Server process only | Shell environment or ignored `.env.local` | Revoke/replace in Google AI Studio/Cloud; restart local service | Paid usage and provider-account access |
-| `QUALITY_LAB_PROXY_TOKEN` | Vite proxy and loopback service | Local server processes only | Random UUID generated for each `dev:quality` run | Automatic on every restart | Temporary authority to invoke the local paid route |
+| `ANTHROPIC_API_KEY` | `npm run eval:live` only | Test process; never the app | Shell environment | Revoke/replace in the Anthropic console | Free token-counting endpoint; sends fixture texts, never user data |
 
-No variable with a `VITE_` prefix contains a secret. Provider credentials
-are not accepted by React, returned by the status route, placed in
-`localStorage`, or bundled into production assets.
+Nothing is read from a `VITE_`-prefixed variable, placed in `localStorage`, or
+bundled into production assets. The Quality Lab gets its evidence from a check
+pack the user runs in their own AI tool and pastes back, so there is no key for
+the browser to mishandle.
 
 ## Local setup
 
-Copy `.env.example` to `.env.local` and populate only the providers being
-tested. Both `.env.local` and the broader `.env.*` family are ignored,
-while `.env.example` remains tracked.
+None required. `npm install && npm run dev` gives the complete product.
 
-## Pre-publication and pre-live checklist
+Set `ANTHROPIC_API_KEY` in your shell only when you deliberately want to run the
+calibration check. `.env.local` and the broader `.env.*` family stay ignored;
+`.env.example` remains tracked as documentation.
+
+## Pre-publication checklist
 
 - Confirm `git status --ignored` lists local environment files as ignored.
 - Scan the full tracked tree and Git history for provider-key patterns.
-- Run the deterministic tests, lint, and production build.
-- Do not run `eval:live` or Quality Lab smoke calls unless live provider use
-  is explicitly intended.
+- Run lint, the deterministic tests, and the production build.
+- Grep `dist/` for `apiKey`, `Authorization`, and provider hostnames; a hit
+  means something reintroduced a paid path.
+- Do not run `eval:live` unless live provider use is explicitly intended.
 - If any key is ever committed, revoke it before rewriting or republishing
   history; removing the text alone is not sufficient.

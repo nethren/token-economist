@@ -492,19 +492,6 @@
   }
 }
 
-.btn.spend {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .btn.spend:hover:not(:disabled) {
-    background: var(--accent-deep);
-    border-color: var(--accent-deep);
-  }
-}
-
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -1261,18 +1248,23 @@
   padding: 3px 9px;
 }
 
-/* single-column model list — no more cramped 2-col wrap in the rail */
-.lab-models {
-  display: grid;
-  gap: 2px;
+/* numbered stages of the bring-your-own-AI flow */
+.lab-step {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 22px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
 }
 
-.lab-models .checkline {
-  margin: 3px 0;
-}
-
-.lab-models .hint {
-  margin-top: 0;
+.lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 2px;
 }
 
 .lab-row {
@@ -1291,26 +1283,6 @@
   line-height: 1.5;
   padding: 9px 12px;
   margin: 10px 0;
-}
-
-.lab-notice {
-  background: var(--bg-sunken);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  color: var(--text-soft);
-  font-size: 12px;
-  line-height: 1.55;
-  padding: 9px 12px;
-  margin: 0 0 14px;
-}
-
-.lab-notice strong {
-  color: var(--text);
-}
-
-.lab-notice code {
-  font-family: var(--mono);
-  font-size: 11px;
 }
 
 .cost-preview {

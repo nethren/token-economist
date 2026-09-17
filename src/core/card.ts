@@ -388,19 +388,33 @@ export function renderCard(opts: {
   lines.push("");
   if (runs.length === 0) {
     lines.push(
-      `No quality measurement has been run. Cost is predictable from tokens; quality must be observed — run the Quality Lab (a handful of samples, cost previewed before spending) before treating the recommendation as final.`,
+      `No quality check has been run. Cost is predictable from tokens; quality must be observed — export the check pack from the Quality Lab, run it in your own AI tool, and paste the replies back before treating the recommendation as final.`,
     );
   } else {
     for (const r of runs) {
       const st = summarizeRun(r);
       const stale = r.ranAgainst !== opts.currentFingerprint;
+      const origin =
+        r.source === "demo"
+          ? "demo data, not a measurement"
+          : `replies supplied by the author, est. ${fmtUSD(r.totalCostUSD)} of their own spend`;
       const caveat = stale
         ? ` — STALE: measured against a different prompt or reply cap, does not apply here`
         : st.complete
           ? ""
           : ` — INCOMPLETE (${st.unreviewed} unreviewed), not verified`;
       lines.push(
-        `- **${r.modelId}**: ${st.passed}/${st.total} passed, ${st.failed} failed, ${st.unreviewed} unreviewed on the ${st.checkName} check (${fmtUSD(r.totalCostUSD)} spent, ${r.ranAt.slice(0, 10)})${caveat}.`,
+        `- **${r.modelId}**: ${st.passed}/${st.total} passed, ${st.failed} failed, ${st.unreviewed} unreviewed on the ${st.checkName} check (${origin}, ${r.ranAt.slice(0, 10)})${caveat}.`,
+      );
+    }
+    lines.push("");
+    if (runs.some((r) => r.source === "byo")) {
+      lines.push(
+        `*Quality evidence is self-reported. The author ran the check in their own AI tool and pasted the replies back; Token Economist scored them offline against the stated check.*`,
+      );
+    } else {
+      lines.push(
+        `*This card carries demo data only. Nothing here was measured; replace it with a real check before relying on the quality claim.*`,
       );
     }
   }
