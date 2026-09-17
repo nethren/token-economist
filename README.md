@@ -3,17 +3,16 @@
 **Estimate what an AI feature will cost before you put a model name in the
 PRD.**
 
-I built Token Economist after making the same planning spreadsheet more than
-once. Provider pricing pages gave me a price per million tokens. I still had to
-work out what a six-turn support chat would cost after history, retrieved docs,
-retries, caching, and the model's reply. Then I had to explain whether the
-cheapest model could handle the job.
+Provider pricing pages list a price per million tokens. A PM still has to
+translate that number into a six-turn support chat with history, retrieved
+documents, retries, caching, and a model reply. The cheapest option also needs
+a quality check before it earns a place in the PRD.
 
-Token Economist turns a draft prompt and rough usage numbers into a live cost
-receipt across seven OpenAI, Anthropic, and Google models. You can see where the
-money goes, clean up expensive parts of the prompt, and copy the result into a
-PRD or ticket. The local Quality Lab lets you test a cheaper candidate against
-your own definition of “good enough.”
+With Token Economist, you turn a draft prompt and rough usage numbers into a
+live cost receipt across seven OpenAI, Anthropic, and Google models. You can see
+where the money goes, clean up expensive parts of the prompt, and copy the
+result into a PRD or ticket. The local Quality Lab lets you test a cheaper
+candidate against your own definition of “good enough.”
 
 ![Token Economist](docs/screenshot.png)
 
