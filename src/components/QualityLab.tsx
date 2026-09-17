@@ -7,17 +7,17 @@ import {
   previewRunCost,
   runFingerprint,
 } from "../core/measure";
-import { renderCheckPack } from "../core/pack";
+import { parseReplyPack, renderCheckPack } from "../core/pack";
 import { fmtUSD, summarizeRun } from "../core/card";
 
 /**
- * Quality Lab — bring your own AI.
+ * Quality Lab — one document out, one document back.
  *
- * The app exports a check pack, the user runs it in the tool they already pay
- * for, and the replies come back here to be scored locally. No key, no proxy,
- * no paid call from this app. Every run is labelled with where the evidence
- * came from, because "the user told us" and "we measured it" are not the same
- * claim.
+ * Download the check, run it in whatever AI tool you already pay for, paste the
+ * whole reply document into one box. No key, no proxy, no paid call from this
+ * app, and no form to fill in per sample. Every run is labelled with where the
+ * evidence came from, because "the user told us" and "we measured it" are not
+ * the same claim.
  */
 export function QualityLab({
   featureName,
@@ -39,7 +39,7 @@ export function QualityLab({
   const [samplesText, setSamplesText] = useState("");
   const [checkKind, setCheckKind] = useState<QualityCheck["kind"]>("json");
   const [checkValue, setCheckValue] = useState("");
-  const [outputs, setOutputs] = useState<string[]>([]);
+  const [pasted, setPasted] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
@@ -55,6 +55,7 @@ export function QualityLab({
 
   const model = useMemo(() => MODELS.find((m) => m.id === modelId) ?? MODELS[0], [modelId]);
   const check: QualityCheck = { kind: checkKind, value: checkValue || undefined };
+  const fingerprint = runFingerprint(prompt, maxTokens);
 
   const preview = useMemo(
     () => previewRunCost(model, prompt, samples, maxTokens).totalUSD,
@@ -68,8 +69,12 @@ export function QualityLab({
     [featureName, prompt, model, samples, checkKind, checkValue, maxTokens],
   );
 
-  const filled = outputs.filter((o) => o && o.trim().length > 0).length;
-  const canScore = samples.length > 0 && filled > 0;
+  const parsed = useMemo(
+    () => parseReplyPack(pasted, samples.length),
+    [pasted, samples.length],
+  );
+
+  const mismatched = Boolean(parsed.configId && parsed.configId !== fingerprint);
 
   const copyPack = async () => {
     setError("");
@@ -92,20 +97,18 @@ export function QualityLab({
     URL.revokeObjectURL(url);
   };
 
-  const setOutput = (i: number, value: string) => {
-    setOutputs((prev) => {
-      const next = [...prev];
-      while (next.length < samples.length) next.push("");
-      next[i] = value;
-      return next;
-    });
-  };
-
   const score = () => {
     setError("");
-    const run = buildPastedRun({ model, prompt, samples, outputs, check, maxTokens });
-    const kept = runs.filter((r) => r.modelId !== run.modelId);
-    setRuns([...kept, run]);
+    const run = buildPastedRun({
+      model,
+      prompt,
+      samples,
+      outputs: parsed.replies,
+      check,
+      maxTokens,
+      declaredConfigId: parsed.configId,
+    });
+    setRuns([...runs.filter((r) => r.modelId !== run.modelId), run]);
   };
 
   const overrideResult = (runModelId: string, idx: number, pass: boolean) => {
@@ -145,10 +148,7 @@ export function QualityLab({
         results,
         totalCostUSD: 0.001,
         ranAt: new Date().toISOString(),
-        // The stale case deliberately carries a fingerprint from a different
-        // configuration, which is what retires the stamp.
-        ranAgainst:
-          kind === "stale" ? "demo-other-configuration" : runFingerprint(prompt, maxTokens),
+        ranAgainst: kind === "stale" ? "demo-other-configuration" : fingerprint,
         source: "demo",
       },
     ]);
@@ -157,9 +157,9 @@ export function QualityLab({
   return (
     <div className="panel lab">
       <p className="lab-lead">
-        Cost is predictable from tokens. Quality has to be observed. Export the check below, run it
-        in the AI tool you already pay for, and paste the replies back — scoring happens here, on
-        your machine.
+        Cost is predictable from tokens. Quality has to be watched. Download the check, run it in
+        the AI tool you already pay for, paste the reply back. Scoring happens here, on your
+        machine.
       </p>
       <div className="lab-facts">
         <span>no API key, ever</span>
@@ -167,7 +167,17 @@ export function QualityLab({
         <span>replies scored locally</span>
       </div>
 
-      <div className="lab-step">1 · Set up the check</div>
+      <div className="lab-step">1 · Describe the check</div>
+
+      <label className="field">
+        <span>Test inputs — one per line, up to {MAX_SAMPLES_PER_RUN}</span>
+        <textarea
+          style={{ minHeight: 84 }}
+          value={samplesText}
+          onChange={(e) => setSamplesText(e.target.value)}
+          placeholder={"I was charged twice this month\nAPI returns 500 on upload\n…"}
+        />
+      </label>
 
       <div className="lab-row">
         <label className="field">
@@ -175,7 +185,7 @@ export function QualityLab({
           <select value={modelId} onChange={(e) => setModelId(e.target.value)}>
             {MODELS.map((m: ModelSpec) => (
               <option key={m.id} value={m.id}>
-                {m.displayName} ({m.provider})
+                {m.displayName}
               </option>
             ))}
           </select>
@@ -191,16 +201,6 @@ export function QualityLab({
           />
         </label>
       </div>
-
-      <label className="field">
-        <span>Test inputs (max {MAX_SAMPLES_PER_RUN}, one per line)</span>
-        <textarea
-          style={{ minHeight: 96 }}
-          value={samplesText}
-          onChange={(e) => setSamplesText(e.target.value)}
-          placeholder={"I was charged twice this month\nAPI returns 500 on upload\n…"}
-        />
-      </label>
 
       <div className="lab-row">
         <label className="field">
@@ -225,47 +225,59 @@ export function QualityLab({
 
       <div className="lab-step">2 · Run it in your own AI tool</div>
 
-      <div className="cost-preview">
-        Running this will cost about <strong>{fmtUSD(preview)}</strong> on your account, for{" "}
-        {samples.length} {samples.length === 1 ? "sample" : "samples"} with replies capped at{" "}
-        {maxTokens} tokens. Token Economist charges nothing and calls nothing.
-      </div>
-
       <div className="lab-actions">
-        <button className="btn primary" disabled={samples.length === 0} onClick={copyPack}>
-          {copied ? "Copied" : "Copy check pack"}
+        <button className="btn primary" disabled={samples.length === 0} onClick={downloadPack}>
+          Download check
         </button>
-        <button className="btn" disabled={samples.length === 0} onClick={downloadPack}>
-          Download .md
+        <button className="btn" disabled={samples.length === 0} onClick={copyPack}>
+          {copied ? "Copied" : "Copy instead"}
         </button>
       </div>
       <p className="hint">
-        Paste it into Claude, ChatGPT, Cursor, or anything else. The pack carries the prompt, the
-        samples, the reply cap, and the instructions.
+        {samples.length === 0
+          ? "Add a test input above to build the check."
+          : `Paste it into Claude, ChatGPT, Cursor — anything. It costs about ${fmtUSD(preview)} on your account. Token Economist charges nothing and calls nothing.`}
       </p>
       {error && <div className="lab-error">{error}</div>}
 
       {samples.length > 0 && (
         <>
-          <div className="lab-step">3 · Paste the replies back</div>
-          {samples.map((s, i) => (
-            <label className="field" key={i}>
-              <span>
-                Reply to sample {i + 1} <span className="hint">{s.slice(0, 60)}</span>
-              </span>
-              <textarea
-                style={{ minHeight: 64 }}
-                value={outputs[i] ?? ""}
-                onChange={(e) => setOutput(i, e.target.value)}
-                placeholder="Paste what the model replied…"
-              />
-            </label>
-          ))}
-          <button className="btn primary" disabled={!canScore} onClick={score}>
-            Score {filled} {filled === 1 ? "reply" : "replies"}
+          <div className="lab-step">3 · Paste the reply back</div>
+          <label className="field">
+            <textarea
+              style={{ minHeight: 120 }}
+              value={pasted}
+              onChange={(e) => setPasted(e.target.value)}
+              placeholder={"Paste the whole reply document your AI tool produced…"}
+            />
+          </label>
+
+          {pasted.trim().length > 0 && (
+            <div className={`lab-parse ${parsed.found === samples.length && !mismatched ? "ok" : "warn"}`}>
+              <strong>
+                Read {parsed.found} of {samples.length}{" "}
+                {samples.length === 1 ? "reply" : "replies"}
+              </strong>
+              {mismatched && (
+                <span>
+                  {" "}
+                  · this reply was made for a different prompt or reply cap, so it will be marked
+                  stale
+                </span>
+              )}
+              {parsed.warnings.map((w, i) => (
+                <span key={i} className="lab-parse-note">
+                  {w}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <button className="btn primary" disabled={parsed.found === 0} onClick={score}>
+            Score {parsed.found} {parsed.found === 1 ? "reply" : "replies"}
           </button>
           <p className="hint">
-            Blank boxes stay unreviewed rather than counting as failures. Token counts here are
+            Missing replies stay unreviewed rather than counting as failures. Token counts are
             offline estimates; your provider dashboard has the billed truth.
           </p>
         </>
@@ -287,7 +299,7 @@ export function QualityLab({
 
       {runs.map((r) => {
         const st = summarizeRun(r);
-        const stale = r.ranAgainst !== runFingerprint(prompt, maxTokens);
+        const stale = r.ranAgainst !== fingerprint;
         return (
           <div key={r.modelId}>
             <h3 style={{ marginTop: 18, fontSize: 14 }}>

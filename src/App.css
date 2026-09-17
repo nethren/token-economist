@@ -1285,19 +1285,48 @@
   margin: 10px 0;
 }
 
-.cost-preview {
-  font-size: 12.5px;
+/* what the parser made of the pasted reply document */
+.lab-parse {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 6px;
+  font-size: 12px;
   line-height: 1.5;
-  padding: 10px 12px;
-  margin: 10px 0;
-  background: var(--bg-sunken);
+  padding: 9px 12px;
+  margin: 2px 0 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--rule);
+  background: var(--bg-sunken);
+  color: var(--text-soft);
 }
 
-.cost-preview strong {
-  font-family: var(--mono);
-  color: var(--accent);
+.lab-parse.ok {
+  border-color: color-mix(in srgb, var(--green) 40%, transparent);
+  background: var(--green-tint);
+}
+
+.lab-parse.warn {
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+  background: var(--amber-tint);
+}
+
+.lab-parse strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.lab-parse-note {
+  flex-basis: 100%;
+  color: var(--text-faint);
+}
+
+/* the assumptions most features never touch */
+.more.advanced {
+  margin-top: 14px;
+}
+
+.more.advanced > summary {
+  font-size: 12px;
 }
 
 .labstatus {

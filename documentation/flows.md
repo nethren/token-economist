@@ -64,24 +64,31 @@ No credential and no local service.
 **Outcome:** A scored `MeasureRun` labelled `source: "byo"`, bound to the
 prompt and reply cap it was collected against.
 
-1. The user picks the model, samples, pass condition, and reply cap. The panel
-   shows what running it will cost on the user's own account.
+1. The user gives the samples, the model, the pass condition, and the reply
+   cap. The panel states what running it will cost on the user's own account.
 2. On an explicit click, `renderCheckPack()` produces a Markdown brief carrying
-   the prompt, the samples, the pass condition, the cap, and the configuration
-   fingerprint. The user copies or downloads it.
+   the prompt, the samples, the pass condition, the cap, the configuration
+   fingerprint, and the exact reply shape to return. The user downloads or
+   copies it.
 3. The user runs the pack in whatever AI tool they already pay for. That
    exchange is between them and their provider; this app is not in it.
-4. The user pastes each reply into the matching box.
-5. `buildPastedRun()` scores each reply offline with `scoreOutput`, estimates
-   tokens with the bundled tokenizer, and stamps `ranAgainst` and `source`.
+4. The user pastes the whole reply document into one box.
+5. `parseReplyPack()` pulls out the numbered replies and the declared
+   configuration id, and reports what it read before anything is scored.
+6. `buildPastedRun()` scores each reply offline with `scoreOutput`, estimates
+   tokens with the bundled tokenizer, and stamps `source` plus `ranAgainst` —
+   using the declared configuration id when the document carries one.
 
 **Trust crossings:** Browser → check pack (only when the user moves it) →
 user's own AI tool → pasted text back into the browser.
 **Side effects:** Clipboard write or a file download. No billing, no request.
-**Failure behavior:** A blank box stays unreviewed rather than counting as a
-failure, so an unfinished paste can never certify a model. A clipboard block
-falls back to the download button. Editing the prompt or the cap invalidates
-the run through the fingerprint rather than silently keeping the stamp.
+**Failure behavior:** A missing reply stays unreviewed rather than counting as
+a failure, so an incomplete paste can never certify a model. A reply the parser
+cannot place is reported rather than guessed at, because misalignment would
+attribute an answer to the wrong sample. A document from an earlier
+configuration is flagged on paste and stamped with the id it declares, so it
+reports stale instead of borrowing the current prompt's credibility. A
+clipboard block falls back to the download button.
 
 **Known limitation, stated in the product:** the app cannot witness that a
 pasted reply came from the model it is attributed to, and its token counts for

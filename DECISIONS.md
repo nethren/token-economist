@@ -630,3 +630,46 @@ with them: re-scoring pasted text is free, so there is nothing left to cache.
 Verification: lint clean, 88 tests passing (5 skipped), build clean. The
 production bundle was grepped for `api/quality`, `QUALITY_LAB`, `loopback`,
 `apiKey` and the dev fixture — zero hits for each.
+
+## 2026-09-17 — D27: One document out, one document back
+
+D26 moved the model call to the user's own AI tool but left the paste-back as a
+form: one textarea per sample, filled in one at a time. For five samples that is
+five copy-paste round trips between two windows, and the friction lands exactly
+where the user is least invested — after they have already done the work. A
+feature nobody finishes is not much better than a feature nobody can start.
+
+The pack now specifies its own return format. It asks for a single document
+carrying the configuration id and `## Reply N` sections, and `parseReplyPack()`
+reads that back out of one paste. The flow is: prompt → scale → download the
+check → run it → paste the reply → score.
+
+`parseReplyPack` is deliberately forgiving about formatting and deliberately
+strict about alignment. It accepts `## Reply 1`, `### Reply 1:`, `Output 2`,
+`Answer #3`, unwraps a code fence around the whole document or around one
+reply, and falls back to horizontal rules or, for a single sample, to the whole
+paste. What it will not do is guess: a reply numbered outside the sample range
+or repeated is dropped with a warning rather than shifted into a neighbouring
+slot, because a reply attributed to the wrong sample is worse evidence than a
+missing one, and the user cannot see the mistake.
+
+The declared configuration id is now authoritative for `ranAgainst`. Paste a
+document generated before a prompt edit and the run records the configuration
+it actually measured, so it reports stale instead of being re-badged as
+current. The mismatch is also surfaced at paste time, before scoring.
+
+The scale inputs were cut from nine fields and two toggles to four fields:
+conversations per month, turns per conversation, user tokens per turn, and
+expected reply tokens. Reply cap, retry rate, tool calls, tokens per tool call,
+thinking tokens, caching and batch moved into an advanced panel, which opens
+itself when a lint action changes something inside it — a control the user
+cannot see changing on its own looks like a bug. Nothing was removed from the
+model; the estimate still prices all of it, and the defaults are unchanged.
+
+Verification: lint clean, 100 tests passing (12 new, all on the parser and the
+configuration-id stamping), build clean. The whole flow was walked in the
+browser: download, paste a realistic reply document with a fenced JSON answer, a
+prose answer and a bare JSON answer, read 3 of 3, score 2/3 as failed, then edit
+the prompt and confirm the amber mismatch warning and the STALE card line.
+Contrast for the new parse banner and advanced summary measured above 6.7:1 in
+both themes.

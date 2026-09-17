@@ -71,8 +71,9 @@ and Token Economist exports a **check pack**: a Markdown brief holding the
 prompt, the samples, the pass condition, and the reply cap.
 
 Run that pack wherever you already pay for a model — Claude, ChatGPT, Cursor,
-anything. Paste the replies back and the app scores them locally, then folds
-the result into the recommendation and the cost card.
+anything. It replies with one document; paste the whole thing back into one
+box. The app reads the replies out of it, scores them locally, and folds the
+result into the recommendation and the cost card. One file out, one file back.
 
 No API key ever enters this app, because it never calls a provider. The spend
 stays on your own account, in your own tool, and the app previews it first. The

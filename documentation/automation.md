@@ -19,7 +19,7 @@ reasonably expect to be an AI surface. It is not one.
 - One selected model, named in the pack so the user knows what to run.
 - A 16–1024 reply cap, carried into the pack as an instruction.
 - A deterministic check: valid JSON, contains, regex, or manual judgment.
-- The replies the user pastes back.
+- One reply document, pasted back whole, parsed into per-sample replies.
 
 ## Tool/API surface
 

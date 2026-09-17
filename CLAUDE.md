@@ -23,7 +23,11 @@ Read `README.md`, `PRODUCT.md`, `DECISIONS.md`, and
 - Label provenance. Every run carries `source`; demo fixtures must never render
   as a measurement, and the card must state that evidence is self-reported.
 - A run is valid only for the prompt and reply cap it was collected against
-  (`ranAgainst`). A mismatch is stale — never passed, failed, or missing.
+  (`ranAgainst`). A mismatch is stale — never passed, failed, or missing. When
+  a pasted reply document declares a configuration id, that id wins: evidence
+  is stamped with what it measured, never re-badged as current.
+- The parser may be forgiving about formatting but never about alignment. A
+  reply it cannot place is reported, not guessed at.
 - Price refresh may fetch only the public model list and must never include
   prompts or Quality Lab data.
 - Share links intentionally contain the prompt. Preserve the explicit user

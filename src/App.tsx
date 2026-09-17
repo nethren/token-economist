@@ -139,6 +139,7 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
 
 export default function App() {
   const [featureName, setFeatureName] = useState(RESTORED?.featureName ?? "");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [prompt, setPrompt] = useState(RESTORED?.prompt ?? "");
   const [assumptions, setAssumptions] = useState<ScaleAssumptions>(
     RESTORED?.assumptions ?? DEFAULT_ASSUMPTIONS,
@@ -255,6 +256,9 @@ export default function App() {
   };
 
   const applyAction = (action: LintAction) => {
+    // Both of these live in the advanced panel. Changing a control the user
+    // cannot see would look like the number moved on its own, so open it.
+    setAdvancedOpen(true);
     switch (action.kind) {
       case "enable-caching":
         set("useCaching", true);
@@ -417,80 +421,95 @@ export default function App() {
                 what="How long you expect each reply to be."
                 tip="This drives cost the most. Leave blank if unsure; we'll flag it."
               />
-              <NumField
-                label="Reply limit (max_tokens)"
-                value={assumptions.maxOutputTokens}
-                onChange={(n) => set("maxOutputTokens", n)}
-                hint="blank = uncapped (flagged)"
-                what="A hard ceiling on any single reply's length."
-                tip="Caps your worst case. Leave blank if none is set; we'll flag it."
-              />
-              <NumField
-                label="Retry rate %"
-                value={Math.round(assumptions.retryRate * 100)}
-                onChange={(n) => set("retryRate", (n ?? 0) / 100)}
-                what="Requests you send again after a failure or bad answer."
-                tip="Each retry bills again. 3% is a safe default."
-              />
-              <NumField
-                label="Tool calls / turn"
-                value={assumptions.toolCallsPerTurn}
-                onChange={(n) => set("toolCallsPerTurn", n ?? 0)}
-                what="Tools the model uses per turn: search, lookups, functions."
-                tip="Each result adds text to read. Use 0 for no tools."
-              />
-              <NumField
-                label="Tokens / tool call"
-                value={assumptions.tokensPerToolCall}
-                onChange={(n) => set("tokensPerToolCall", n ?? 0)}
-                step={100}
-                what="Text each tool result adds back to the conversation."
-                tip="A lookup is small; a whole document is large. For RAG, model retrieved context here."
-              />
-              <NumField
-                label="Thinking tokens / turn"
-                value={assumptions.reasoningTokensPerTurn}
-                onChange={(n) => set("reasoningTokensPerTurn", Math.max(0, n ?? 0))}
-                step={500}
-                what="Hidden tokens a thinking model spends before it answers. Billed as output, never shown."
-                tip="0 for non-thinking models. Agentic workloads often burn 1–5k per turn."
-              />
-              <label className="checkline switch wide">
-                <input
-                  type="checkbox"
-                  checked={assumptions.useCaching}
-                  onChange={(e) => set("useCaching", e.target.checked)}
-                />
-                <span className="switch-track" aria-hidden="true" />
-                Prompt caching on the static prefix
-                <InfoDot
-                  what="Reuse a fixed prompt prefix at a steep discount instead of re-sending it."
-                  tip="Turn on when your instructions stay the same across requests."
-                />
-              </label>
-              {assumptions.useCaching && (
-                <NumField
-                  label="Cache hit rate %"
-                  value={Math.round(assumptions.cacheHitRate * 100)}
-                  onChange={(n) => set("cacheHitRate", Math.min(100, Math.max(0, n ?? 0)) / 100)}
-                  what="Eligible requests that actually reuse the cache."
-                  tip="Steady traffic keeps it warm; sporadic traffic lets it expire."
-                />
-              )}
-              <label className="checkline switch wide">
-                <input
-                  type="checkbox"
-                  checked={assumptions.useBatch}
-                  onChange={(e) => set("useBatch", e.target.checked)}
-                />
-                <span className="switch-track" aria-hidden="true" />
-                Batch API (non-interactive, −50%)
-                <InfoDot
-                  what="Submit work in bulk, get results within hours, for half price."
-                  tip="Good for overnight jobs. Not for live chat."
-                />
-              </label>
             </div>
+
+            {/* Everything below changes the number less than the four above, and
+                most features leave it at the default. It stays one click away
+                rather than in the way — and opens itself when a suggestion
+                changes something inside it. */}
+            <details
+              className="more advanced"
+              open={advancedOpen}
+              onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+            >
+              <summary>Retries, tools, thinking, caching, batch</summary>
+              <div className="assume-grid">
+                <NumField
+                  label="Reply limit (max_tokens)"
+                  value={assumptions.maxOutputTokens}
+                  onChange={(n) => set("maxOutputTokens", n)}
+                  hint="blank = uncapped (flagged)"
+                  what="A hard ceiling on any single reply's length."
+                  tip="Caps your worst case. Leave blank if none is set; we'll flag it."
+                />
+                <NumField
+                  label="Retry rate %"
+                  value={Math.round(assumptions.retryRate * 100)}
+                  onChange={(n) => set("retryRate", (n ?? 0) / 100)}
+                  what="Requests you send again after a failure or bad answer."
+                  tip="Each retry bills again. 3% is a safe default."
+                />
+                <NumField
+                  label="Tool calls / turn"
+                  value={assumptions.toolCallsPerTurn}
+                  onChange={(n) => set("toolCallsPerTurn", n ?? 0)}
+                  what="Tools the model uses per turn: search, lookups, functions."
+                  tip="Each result adds text to read. Use 0 for no tools."
+                />
+                <NumField
+                  label="Tokens / tool call"
+                  value={assumptions.tokensPerToolCall}
+                  onChange={(n) => set("tokensPerToolCall", n ?? 0)}
+                  step={100}
+                  what="Text each tool result adds back to the conversation."
+                  tip="A lookup is small; a whole document is large. For RAG, model retrieved context here."
+                />
+                <NumField
+                  label="Thinking tokens / turn"
+                  value={assumptions.reasoningTokensPerTurn}
+                  onChange={(n) => set("reasoningTokensPerTurn", Math.max(0, n ?? 0))}
+                  step={500}
+                  what="Hidden tokens a thinking model spends before it answers. Billed as output, never shown."
+                  tip="0 for non-thinking models. Agentic workloads often burn 1–5k per turn."
+                />
+                <label className="checkline switch wide">
+                  <input
+                    type="checkbox"
+                    checked={assumptions.useCaching}
+                    onChange={(e) => set("useCaching", e.target.checked)}
+                  />
+                  <span className="switch-track" aria-hidden="true" />
+                  Prompt caching on the static prefix
+                  <InfoDot
+                    what="Reuse a fixed prompt prefix at a steep discount instead of re-sending it."
+                    tip="Turn on when your instructions stay the same across requests."
+                  />
+                </label>
+                {assumptions.useCaching && (
+                  <NumField
+                    label="Cache hit rate %"
+                    value={Math.round(assumptions.cacheHitRate * 100)}
+                    onChange={(n) => set("cacheHitRate", Math.min(100, Math.max(0, n ?? 0)) / 100)}
+                    what="Eligible requests that actually reuse the cache."
+                    tip="Steady traffic keeps it warm; sporadic traffic lets it expire."
+                  />
+                )}
+                <label className="checkline switch wide">
+                  <input
+                    type="checkbox"
+                    checked={assumptions.useBatch}
+                    onChange={(e) => set("useBatch", e.target.checked)}
+                  />
+                  <span className="switch-track" aria-hidden="true" />
+                  Batch API (non-interactive, −50%)
+                  <InfoDot
+                    what="Submit work in bulk, get results within hours, for half price."
+                    tip="Good for overnight jobs. Not for live chat."
+                  />
+                </label>
+              </div>
+            </details>
+
             {recommendation && recommendation.estimate.assumptionNotes.length > 0 && (
               <ul className="notes-list">
                 {recommendation.estimate.assumptionNotes.map((n, i) => (

@@ -103,6 +103,13 @@ export function buildPastedRun(opts: {
   outputs: string[];
   check: QualityCheck;
   maxTokens: number;
+  /**
+   * The configuration id the pasted reply document declared, when it kept one.
+   * Evidence belongs to the prompt it was collected against, so a document
+   * generated before an edit is stamped with the old fingerprint and reports
+   * as stale — rather than being silently re-badged as current.
+   */
+  declaredConfigId?: string | null;
 }): MeasureRun {
   const samples = opts.samples.slice(0, MAX_SAMPLES_PER_RUN);
   const promptTok = calibrated(countBaseTokens(opts.prompt), opts.model).point;
@@ -134,7 +141,7 @@ export function buildPastedRun(opts: {
     results,
     totalCostUSD: total,
     ranAt: new Date().toISOString(),
-    ranAgainst: runFingerprint(opts.prompt, opts.maxTokens),
+    ranAgainst: opts.declaredConfigId || runFingerprint(opts.prompt, opts.maxTokens),
     source: "byo",
   };
 }

@@ -1,6 +1,6 @@
 # Test coverage
 
-The default deterministic gate is `npm test`: 88 tests pass across six test
+The default deterministic gate is `npm test`: 100 tests pass across six test
 files. Five provider-truth tests are skipped unless `ANTHROPIC_API_KEY` is
 deliberately supplied. Nothing in the application can contact a model provider,
 so `eval:live` is the only path in the repository that reaches one, and it hits
@@ -26,7 +26,10 @@ enforces it.
 | Price refresh | Only valid positive mapped prices apply; malformed/missing rows preserve snapshots; cache and offline fallback behave | Corrupt cache or payload cannot replace registry values | `flows.md` §2; `tests/improvements.test.ts` | Unit | Existing |
 | Bring-your-own evidence | Pasted replies are scored offline, labelled `source: "byo"`, and bound to the prompt and cap they were collected against | A run that verifies a configuration it never saw, or loses its provenance, fails | `flows.md` §4; `tests/card-measure.test.ts` | Unit | Existing |
 | Missing evidence stays missing | A blank reply box is unreviewed, contributes no tokens and no cost | A blank box counting as a pass or a failure fails | `tests/card-measure.test.ts` | Unit | Existing |
-| Check-pack completeness | The pack carries the prompt, samples, check name, reply cap, configuration fingerprint, and the user's own estimated spend | A pack that cannot reproduce the check elsewhere fails | `src/core/pack.ts`; `tests/card-measure.test.ts` | Unit | Existing |
+| Check-pack completeness | The pack carries the prompt, samples, check name, reply cap, configuration fingerprint, the user's own estimated spend, and the reply shape it can read back | A pack that cannot reproduce the check elsewhere fails | `src/core/pack.ts`; `tests/card-measure.test.ts` | Unit | Existing |
+| Reply-document parsing | Numbered replies are read back from one paste across the heading variants AI tools produce, fences are unwrapped, and horizontal rules and the single-sample case fall back correctly | Prose with no headings silently scoring, instead of asking for the headings, fails | `tests/card-measure.test.ts` | Unit | Existing |
+| Parser alignment | An out-of-range or duplicated reply number is dropped with a warning; out-of-order replies land on their stated sample | A reply shifted onto a neighbouring sample fails | `tests/card-measure.test.ts` | Unit | Existing |
+| Declared configuration wins | A pasted document that names a configuration id is stamped with it, so evidence from an earlier prompt reports stale | Re-badging old evidence as current fails | `flows.md` §4; `tests/card-measure.test.ts` | Unit | Existing |
 | Provenance on the card | The card attributes evidence to the author and marks demo data as demo data | Demo data rendering as a measurement fails | `tests/card-measure.test.ts` | Unit | Existing |
 | Provider token calibration | Anthropic truth falls inside the band and point error is within ±12% | Out-of-band counts fail | `EVAL.md`; `tests/live-accuracy.test.ts` | Guarded live | Existing, opt-in |
 
@@ -117,6 +120,27 @@ been theatre.
 `api/quality`, `x-quality-lab-proxy-token`, `QUALITY_LAB`, `dev:quality`,
 `loopback`, `apiKey`, and the dev fixture markers `seedDemo` and `Demo data`.
 Zero hits for each. This should become a committed test; see Proposed tests.
+
+## One-document round-trip record (D27, 2026-09-17)
+
+**Tested.** `npm run lint` (0/0), `npm test` (100 passed, 5 skipped), `npm run
+build` — all green on an isolated copy. Twelve new tests cover the parser:
+the requested shape, the heading variants AI tools actually emit, fence
+unwrapping, partial pastes, out-of-range and duplicate numbers, out-of-order
+replies, the single-sample and horizontal-rule fallbacks, prose with no
+headings, an empty paste, and configuration-id stamping.
+
+**Browser pass.** The whole flow was walked against the dev server: download
+the check, paste a reply document mixing a fenced JSON answer, a prose answer
+and a bare JSON answer, read 3 of 3, score 2 of 3 as a failure. Editing the
+prompt then raised the amber mismatch banner at paste time and produced a STALE
+card line rather than a re-badged current one. A lint action opened the
+advanced scale panel and its value landed visibly. Contrast on the new parse
+banner and advanced summary measured 6.7:1 or better in both themes.
+
+**Not covered.** The parser is exercised by unit tests only; there is no
+fixture corpus of real outputs from several AI tools, so heading shapes outside
+the tested set may still need a warning-and-retry from the user.
 
 ## Recommended CI gate
 
