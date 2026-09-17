@@ -64,27 +64,31 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #1a1917;
-  --bg-raised: #221f1b;
-  --bg-sunken: #131210;
-  --rule: #322e28;
-  --rule-strong: #49423a;
+  /* Near-black field, brown as the secondary layer. The page itself is
+     black; warmth arrives through raised surfaces, rules and tints, so the
+     brown reads as structure and accent rather than as the background. Not
+     pure #000 — a hair of lift keeps edges and shadows legible. */
+  --bg: #0a0a0b;
+  --bg-raised: #16120c;
+  --bg-sunken: #050505;
+  --rule: #2c2419;
+  --rule-strong: #55432c;
 
-  --text: #ece8e0;
-  --text-soft: #ada699;
-  --text-faint: #9a9385;
+  --text: #f0ece4;
+  --text-soft: #b5ac9c;
+  --text-faint: #8d8578;
 
   --accent: #e0705f;
   --accent-deep: #c85748;
-  --accent-tint: #2b1613;
+  --accent-tint: #24120f;
 
   --green: #5cb07f;
-  --green-tint: #16241b;
-  --amber: #d0aa55;
-  --amber-tint: #26200f;
+  --green-tint: #0f1c14;
+  --amber: #d6b064;
+  --amber-tint: #1e1809;
 
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.3);
-  --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.45), 0 18px 44px rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.5);
+  --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.65), 0 18px 44px rgba(0, 0, 0, 0.6);
 }
 
 * {

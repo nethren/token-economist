@@ -519,3 +519,69 @@ Sources:
 - https://developers.openai.com/api/docs/models/gpt-5-mini
 - https://ai.google.dev/gemini-api/docs/pricing
 - https://ai.google.dev/gemini-api/docs/caching
+
+## 2026-09-15 — D24: Quality status is counted, never inferred
+
+`recommend()` computed its pass rate over *reviewed* samples but printed the
+*total* sample count, so a single reviewed sample certified a model with
+"passed your check on all 5 samples" and set `verified: true`. Reproduced
+directly: `[true, null, null, null, null]` produced exactly that string. Its
+mirror image was equally wrong — a reviewed but sub-threshold run (one pass,
+one failure) fell through to "No quality data yet.", reporting observed
+failure as absent evidence.
+
+Runs are now summarised by `summarizeRun()` into an explicit `QualityStatus`
+(total, reviewed, passed, failed, unreviewed, rate, complete, checkName) with
+five states: `not-run`, `unreviewed`, `incomplete`, `passed`, `failed`. Only a
+*complete* run — every sample judged — can verify, and the existing 80%
+eligibility threshold is preserved among complete runs as `PASS_THRESHOLD`.
+Failures are always stated; nothing is dropped to improve a score. The status
+now travels on the `Recommendation`, so the decision panel and the Markdown
+card cannot print different counts. Claims name the check that ran ("valid
+JSON"), because a format check is not a correctness check.
+
+The recommendation also stopped claiming task complexity. `isSimpleTask` is a
+keyword hint whose alternatives lacked a trailing boundary, so `spell` matched
+"spelling", `moderat` matched "moderately" and `label` matched "labelled" — an
+essay prompt read as bounded classification, and changing one word flipped the
+advice without changing the task. The alternatives are now anchored on both
+sides, and more importantly `recommend()` no longer takes the flag at all:
+before evidence exists the copy is "Lowest estimated cost to test … Quality has
+not been tested." The tool states what it priced, not what it believes a model
+can do.
+
+Scope: Phase 1 of `documentation/PRD-token-economist-improvements.md` only.
+TE-03 (multi-stage workflow), TE-04 and TE-05 are untouched. Deterministic and
+offline paths are unchanged, no paid call was made, and no pricing was altered.
+Verification and remaining limitations are recorded in `documentation/tests.md`.
+
+## 2026-09-17 — D25: Quality evidence expires with its configuration
+
+A `MeasureRun` recorded the model, the check and the results, but nothing about
+the prompt or reply cap it measured, and nothing cleared runs when the prompt
+changed. So you could run a check, earn the "quality-checked" stamp, rewrite the
+prompt completely, and keep the stamp. The card would still report that a model
+passed your check. This is the one row of the TE-01 regression matrix that the
+earlier fix left open, and it is the same failure as the partial-review bug:
+claiming more than the evidence supports.
+
+Runs now carry `ranAgainst`, a fingerprint of the prompt plus the reply cap,
+stamped by `runMeasurement` rather than by callers — a fingerprint you have to
+remember to attach is one you will forget. `recommend()` takes the current
+fingerprint and treats any mismatch as a fifth state, `stale`: it never
+verifies, and it is not reported as a failure or as missing data either,
+because evidence from another configuration simply does not apply. The card
+marks the run STALE rather than counting it.
+
+`maxTokens` moved from Quality Lab local state up to `App`, because it is part
+of the configuration a result is valid for and the fingerprint has to see it.
+
+The Lab also gained a dev-only fixture that seeds the passed, failed, partial
+and stale states. Producing real evidence costs money, which meant these states
+had never been looked at in a browser. The fixture is gated on
+`import.meta.env.DEV`, so production builds drop it, and it makes the feature
+demonstrable without provider credentials. All four states were then verified
+across the stamp, both panels and the Markdown card.
+
+Verification: lint clean, 83 tests passing (5 new), build clean. No paid call
+was made and no pricing changed.

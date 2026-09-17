@@ -93,7 +93,6 @@ export function Receipt({
   recommendation,
   estimates,
   findings,
-  runs,
   requestsPerMonth,
   onApply,
   onAction,
@@ -153,9 +152,6 @@ export function Receipt({
 
   const topFindings = findings.slice(0, 3);
   const moreFindings = findings.length - topFindings.length;
-
-  const judged = runs.flatMap((r) => r.results.filter((s) => s.pass !== null));
-  const passed = judged.filter((s) => s.pass).length;
 
   return (
     <div className="decision" id="receipt" role="region" aria-label="The cost decision">
@@ -279,21 +275,44 @@ export function Receipt({
 
         <section className="dc-card">
           <h3>Quality</h3>
-          {recommendation.verified ? (
-            <p className="dc-quality ok">
-              Passed your check on {passed} of {judged.length} samples. The stamp is earned.
-            </p>
-          ) : judged.length > 0 ? (
-            <p className="dc-quality">
-              Your check ran, but nothing has passed enough samples yet ({passed} of {judged.length}).
-              The pick stays <em>unverified</em> until one does.
-            </p>
-          ) : (
-            <p className="dc-quality">
-              Cost is computed. Quality isn't. Run step&nbsp;3 on a few samples and the stamp flips
-              once a model passes your check.
-            </p>
-          )}
+          {(() => {
+            const st = recommendation.status;
+            if (!st || st.state === "not-run")
+              return (
+                <p className="dc-quality">
+                  Cost is computed. Quality isn't. Run step&nbsp;3 on a few samples and the stamp
+                  flips once a model passes your check.
+                </p>
+              );
+            if (st.state === "passed")
+              return (
+                <p className="dc-quality ok">
+                  {st.passed}/{st.total} passed the {st.checkName} check
+                  {st.failed > 0 ? `, ${st.failed} failed` : ""}. That is a {st.checkName} result,
+                  not a general accuracy guarantee.
+                </p>
+              );
+            if (st.state === "stale")
+              return (
+                <p className="dc-quality">
+                  Stale evidence: this result was measured against a different prompt or reply cap,
+                  so it doesn't apply here. Re-run the check in step&nbsp;3.
+                </p>
+              );
+            if (st.state === "failed")
+              return (
+                <p className="dc-quality">
+                  Failed your check: {st.passed}/{st.total} passed the {st.checkName} check. The
+                  pick stays <em>unverified</em>.
+                </p>
+              );
+            return (
+              <p className="dc-quality">
+                Review incomplete — {st.reviewed} of {st.total} samples reviewed, {st.unreviewed}{" "}
+                still unjudged. Not verified.
+              </p>
+            );
+          })()}
         </section>
       </div>
 

@@ -85,7 +85,7 @@ describe("linter on a deliberately bloated prompt", () => {
 
   it("the cheaper-tier finding names the SAME model as the headline recommendation", () => {
     // The tool must never give two different answers to "which cheap model?"
-    const rec = recommend(estimateAll(BLOATED_PROMPT, A, MODELS), [], true);
+    const rec = recommend(estimateAll(BLOATED_PROMPT, A, MODELS), [], "fp");
     const cheaperTier = findings.find((x) => x.rule === "cheaper-tier");
     expect(cheaperTier).toBeDefined();
     expect(cheaperTier!.title).toContain(rec!.estimate.model.displayName);

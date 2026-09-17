@@ -35,7 +35,7 @@ describe("zero network on the free path", () => {
     const a = { ...DEFAULT_ASSUMPTIONS, requestsPerMonth: 50_000 };
     const estimates = estimateAll(BLOATED_PROMPT, a, MODELS);
     const findings = lintPrompt(BLOATED_PROMPT, a, getModel("claude-sonnet-5"));
-    const rec = recommend(estimates, [], true);
+    const rec = recommend(estimates, [], "fp");
     const card = renderCard({
       featureName: "Ticket classifier",
       prompt: BLOATED_PROMPT,
@@ -44,6 +44,7 @@ describe("zero network on the free path", () => {
       findings,
       runs: [],
       recommendation: rec,
+      currentFingerprint: "fp",
       generatedAt: "2026-07-12",
     });
     expect(estimates.length).toBe(MODELS.length);
@@ -72,7 +73,8 @@ describe("determinism", () => {
         assumptions: a,
         findings: lintPrompt(BLOATED_PROMPT, a, getModel("claude-sonnet-5")),
         runs: [],
-        recommendation: recommend(estimates, [], false),
+        recommendation: recommend(estimates, [], "fp"),
+        currentFingerprint: "fp",
         generatedAt: "2026-07-12",
       });
     };

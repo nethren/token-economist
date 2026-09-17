@@ -243,10 +243,24 @@ function applyTrimExamples(p: string): string {
   return lines.filter((_, i) => !drop.has(i)).join("\n");
 }
 
+/**
+ * Weak lexical hint that a prompt *mentions* a bounded classification or
+ * extraction task.
+ *
+ * Every alternative is anchored on BOTH sides. Without a trailing boundary
+ * each branch is a prefix search: `spell` matches "spelling", `moderat`
+ * matches "moderately", and `label` matches "labelled" — so "a moderately
+ * complex reasoning task" and "an essay about a labelled diagram" both read
+ * as bounded classification work.
+ *
+ * This is a lexical hint, never evidence. It must not be used to claim that a
+ * model can handle a task: only a measured check can support that, and the
+ * recommendation copy deliberately makes no capability claim.
+ */
 const SIMPLE_TASK =
-  /\b(classif(y|ication)|categoriz|extract|tag(ging)?|sentiment|translate|reformat|normalize|route|triage|label|dedupe|spell|moderat)/i;
+  /\b(classif(y|ies|ication)|categoriz(e|es|ing|ation)|extract(s|ing|ion)?|tag(s|ging)?|sentiment|translat(e|es|ing|ion)|reformat(s|ting)?|normaliz(e|es|ing|ation)|rout(e|es|ing)|triage|labell?(s|ing)?|dedupe|spell[-\s]?check(s|ing)?|moderat(e|es|ing|ion))\b/i;
 
-/** Heuristic: does the prompt read as a bounded classification/extraction task? */
+/** Lexical hint only — see SIMPLE_TASK. Never a capability claim. */
 export function isSimpleTask(prompt: string): boolean {
   return SIMPLE_TASK.test(prompt);
 }

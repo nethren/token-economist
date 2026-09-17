@@ -1,4 +1,11 @@
-import type { CostBreakdown, LintFinding, MeasureRun, ModelEstimate, ScaleAssumptions } from "./types";
+import type {
+  CostBreakdown,
+  LintFinding,
+  MeasureRun,
+  ModelEstimate,
+  QualityCheck,
+  ScaleAssumptions,
+} from "./types";
 import { STALE_PRICE_DAYS, priceAgeDays } from "./models";
 
 /**
@@ -58,6 +65,9 @@ export interface Recommendation {
   estimate: ModelEstimate;
   reason: string;
   verified: boolean;
+  /** Sample-level accounting behind `verified`, so the interface and the
+   *  exported card can never print different counts. Null when nothing ran. */
+  status: QualityStatus | null;
   /** 2–3 model decision shortlist: cheapest, then the cheaper step-ups. */
   shortlist: ShortlistEntry[];
   /** The cheapest higher-tier alternative, for "if quality matters" framing. */
@@ -97,20 +107,96 @@ function buildShortlist(byCost: ModelEstimate[]): ShortlistEntry[] {
   return shortlist;
 }
 
+// ------------------------------------------------------ quality accounting ----
+
 /**
- * Recommendation policy — the tool's north star is "the cheapest model that
- * is still good enough for THIS feature":
- * 1. If quality runs exist, recommend the cheapest model that passed the
- *    user's own check on every sample (or ≥80% with a caveat).
- * 2. With no quality data there is no evidence any tier is needed, so the
- *    recommendation is the CHEAPEST usable model, framed as a hypothesis to
- *    verify — never a silent default to a pricier tier. The step-up models
- *    are named alongside so "if quality matters" has a concrete next answer.
+ * Sample-level accounting for one measurement run.
+ *
+ * The distinction that matters: a run is evidence of a COMPLETED check only
+ * when every sample carries a verdict. Reviewing one sample out of five tells
+ * you about one sample — reporting it as "all five passed" is the difference
+ * between a measurement and a claim.
+ */
+export interface QualityStatus {
+  state: "not-run" | "unreviewed" | "incomplete" | "passed" | "failed" | "stale";
+  total: number;
+  reviewed: number;
+  passed: number;
+  failed: number;
+  unreviewed: number;
+  /** passed / reviewed — null when nothing has been reviewed yet. */
+  rate: number | null;
+  /** Every sample carries a verdict. */
+  complete: boolean;
+  /** Plain-language name of the check that was applied. */
+  checkName: string;
+}
+
+/** Eligibility threshold among FULLY reviewed runs. Policy unchanged. */
+export const PASS_THRESHOLD = 0.8;
+
+/** What was actually checked — a format check is not a correctness check, so
+ *  the name travels with every claim the tool makes. */
+export function checkName(check: QualityCheck): string {
+  switch (check.kind) {
+    case "json":
+      return "valid JSON";
+    case "contains":
+      return `contains “${check.value ?? ""}”`;
+    case "regex":
+      return `matches /${check.value ?? ""}/`;
+    case "manual":
+      return "manual review";
+  }
+}
+
+export function summarizeRun(run: MeasureRun): QualityStatus {
+  const total = run.results.length;
+  const passed = run.results.filter((s) => s.pass === true).length;
+  const failed = run.results.filter((s) => s.pass === false).length;
+  const reviewed = passed + failed;
+  const unreviewed = total - reviewed;
+  const complete = total > 0 && unreviewed === 0;
+  const rate = reviewed === 0 ? null : passed / reviewed;
+  const state: QualityStatus["state"] =
+    total === 0
+      ? "not-run"
+      : reviewed === 0
+        ? "unreviewed"
+        : !complete
+          ? "incomplete"
+          : (rate as number) >= PASS_THRESHOLD
+            ? "passed"
+            : "failed";
+  return {
+    state,
+    total,
+    reviewed,
+    passed,
+    failed,
+    unreviewed,
+    rate,
+    complete,
+    checkName: checkName(run.check),
+  };
+}
+
+/**
+ * Recommendation policy — "the cheapest model that is still good enough for
+ * THIS feature", stated only as far as the evidence supports:
+ * 1. A model is presented as MEETING your check only when its run is complete
+ *    (every sample reviewed) and at least PASS_THRESHOLD passed. Partial
+ *    review never verifies, and an observed failure is never reported as
+ *    "no quality data".
+ * 2. Without complete evidence the pick is the cheapest usable model, framed
+ *    as the lowest-cost option to TEST. The tool makes no claim about whether
+ *    the prompt is "simple" — it has not analysed the task, and a keyword
+ *    match is not a capability assessment.
  */
 export function recommend(
   estimates: ModelEstimate[],
   runs: MeasureRun[],
-  simpleTask: boolean,
+  currentFingerprint: string,
 ): Recommendation | null {
   const usable = estimates.filter((e) => !e.exceedsContext);
   if (usable.length === 0) return null;
@@ -121,51 +207,94 @@ export function recommend(
     byCost.find((e) => e.model.id !== byCost[0].model.id) ??
     null;
 
-  const passRate = (r: MeasureRun) => {
-    const judged = r.results.filter((s) => s.pass !== null);
-    if (judged.length === 0) return null;
-    return judged.filter((s) => s.pass).length / judged.length;
-  };
+  let firstFailed: { est: ModelEstimate; st: QualityStatus } | null = null;
+  let firstPartial: { est: ModelEstimate; st: QualityStatus } | null = null;
+  let firstStale: { est: ModelEstimate; st: QualityStatus } | null = null;
 
-  if (runs.length > 0) {
-    for (const est of byCost) {
-      const run = runs.find((r) => r.modelId === est.model.id);
-      if (!run) continue;
-      const rate = passRate(run);
-      if (rate === null) continue;
-      if (rate === 1) {
-        return {
-          estimate: est,
-          reason: `Cheapest model that passed your check on all ${run.results.length} samples.`,
-          verified: true,
-          shortlist,
-          stepUp,
-        };
-      }
-      if (rate >= 0.8) {
-        return {
-          estimate: est,
-          reason: `Cheapest model that passed on ${Math.round(rate * 100)}% of samples. Check the failures before you commit.`,
-          verified: true,
-          shortlist,
-          stepUp,
-        };
-      }
+  for (const est of byCost) {
+    const run = runs.find((r) => r.modelId === est.model.id);
+    if (!run) continue;
+    const st = summarizeRun(run);
+    // Evidence gathered against a different prompt or reply cap proves nothing
+    // about this one. It never verifies, and it does not count as a failure
+    // either — it simply no longer applies.
+    if (run.ranAgainst !== currentFingerprint) {
+      if (!firstStale) firstStale = { est, st: { ...st, state: "stale" } };
+      continue;
     }
+    if (st.state === "passed") {
+      const reason =
+        st.failed === 0
+          ? `Lowest-cost model meeting your check: ${st.passed}/${st.total} samples passed the ${st.checkName} check. That is a ${st.checkName} result, not a general accuracy guarantee.`
+          : `Lowest-cost model meeting your check: ${st.passed}/${st.total} passed the ${st.checkName} check and ${st.failed} failed. Review the failures before you commit.`;
+      return { estimate: est, reason, verified: true, status: st, shortlist, stepUp };
+    }
+    if (st.state === "failed" && !firstFailed) firstFailed = { est, st };
+    if ((st.state === "incomplete" || st.state === "unreviewed") && !firstPartial)
+      firstPartial = { est, st };
   }
 
-  const cheapest = byCost[0];
   const stepUpPhrase = stepUp
     ? ` If it falls short, step up to ${stepUp.model.displayName} at ${fmtUSD(stepUp.costPerMonth.point)}/mo.`
     : "";
+
+  // Ran, but the review is unfinished — say so; do not certify and do not
+  // pretend the run never happened.
+  if (firstPartial) {
+    const { est, st } = firstPartial;
+    return {
+      estimate: byCost[0],
+      reason: `Quality check incomplete: ${st.reviewed} of ${st.total} samples reviewed on ${est.model.displayName}. Not verified — judge the remaining ${st.unreviewed} before relying on this.`,
+      verified: false,
+      status: st,
+      shortlist,
+      stepUp,
+    };
+  }
+
+  // Ran and fell short. This is evidence, not an absence of evidence.
+  if (firstFailed) {
+    const { est, st } = firstFailed;
+    const failedIds = new Set(
+      runs.filter((r) => summarizeRun(r).state === "failed").map((r) => r.modelId),
+    );
+    const next = byCost.find((e) => !failedIds.has(e.model.id)) ?? byCost[0];
+    const alt =
+      next.model.id === est.model.id
+        ? ""
+        : ` ${next.model.displayName} is the lowest-cost option still untested.`;
+    return {
+      estimate: next,
+      reason: `No tested model meets your check: ${est.model.displayName} passed ${st.passed}/${st.total} on the ${st.checkName} check.${alt}`,
+      verified: false,
+      status: st,
+      shortlist,
+      stepUp,
+    };
+  }
+
+  // Ran, but against something else. Say so instead of showing a stamp the
+  // current prompt never earned.
+  if (firstStale) {
+    const { est, st } = firstStale;
+    return {
+      estimate: byCost[0],
+      reason: `Quality evidence is stale: ${est.model.displayName} was measured against a different prompt or reply cap. Re-run the check before you rely on it.`,
+      verified: false,
+      status: st,
+      shortlist,
+      stepUp,
+    };
+  }
+
+  const cheapest = byCost[0];
   return {
     estimate: cheapest,
     reason:
-      (simpleTask
-        ? "This looks like a short, bounded task, so the cheapest model should handle it. Run a check to be sure."
-        : "No quality data yet. Start cheap, run a check, and pay for a bigger model only if this one fails.") +
+      `Lowest estimated cost to test. Among the models shown, ${cheapest.model.displayName} has the lowest estimated cost under these assumptions. Quality has not been tested.` +
       stepUpPhrase,
     verified: false,
+    status: null,
     shortlist,
     stepUp,
   };
@@ -179,6 +308,9 @@ export function renderCard(opts: {
   findings: LintFinding[];
   runs: MeasureRun[];
   recommendation: Recommendation | null;
+  /** Fingerprint of the prompt + reply cap the card describes, so runs
+   *  collected against anything else are marked rather than counted. */
+  currentFingerprint: string;
   generatedAt?: string; // injectable for deterministic tests
 }): string {
   const { featureName, estimates, assumptions: a, findings, runs, recommendation } = opts;
@@ -260,10 +392,15 @@ export function renderCard(opts: {
     );
   } else {
     for (const r of runs) {
-      const judged = r.results.filter((s) => s.pass !== null);
-      const passed = judged.filter((s) => s.pass).length;
+      const st = summarizeRun(r);
+      const stale = r.ranAgainst !== opts.currentFingerprint;
+      const caveat = stale
+        ? ` — STALE: measured against a different prompt or reply cap, does not apply here`
+        : st.complete
+          ? ""
+          : ` — INCOMPLETE (${st.unreviewed} unreviewed), not verified`;
       lines.push(
-        `- **${r.modelId}**: ${passed}/${judged.length} samples passed the "${r.check.kind}" check (${r.results.length} run, ${fmtUSD(r.totalCostUSD)} spent, ${r.ranAt.slice(0, 10)}).`,
+        `- **${r.modelId}**: ${st.passed}/${st.total} passed, ${st.failed} failed, ${st.unreviewed} unreviewed on the ${st.checkName} check (${fmtUSD(r.totalCostUSD)} spent, ${r.ranAt.slice(0, 10)})${caveat}.`,
       );
     }
   }

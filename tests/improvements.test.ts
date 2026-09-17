@@ -109,7 +109,8 @@ describe("stale-price flag", () => {
       assumptions: DEFAULT_ASSUMPTIONS,
       findings: [],
       runs: [],
-      recommendation: recommend(estimates, [], false),
+      recommendation: recommend(estimates, [], "fp"),
+      currentFingerprint: "fp",
       generatedAt: "2026-07-12",
     });
     // An explicitly old snapshot is ~6 months old at the injected date.
@@ -216,7 +217,8 @@ describe("live price refresh (opt-in; the mapper is pure and offline)", () => {
       assumptions: DEFAULT_ASSUMPTIONS,
       findings: [],
       runs: [],
-      recommendation: recommend(estimates, [], false),
+      recommendation: recommend(estimates, [], "fp"),
+      currentFingerprint: "fp",
       generatedAt: "2026-07-17",
     });
     expect(card).toContain("refreshed from a public price list (openrouter.ai) on 2026-07-17");
@@ -302,7 +304,7 @@ describe("feature presets", () => {
         expect(e.promptBaseTokens).toBeGreaterThan(20);
         expect(e.costPerMonth.point).toBeGreaterThan(0);
       }
-      expect(recommend(estimates, [], false)).not.toBeNull();
+      expect(recommend(estimates, [], "fp")).not.toBeNull();
     }
   });
 

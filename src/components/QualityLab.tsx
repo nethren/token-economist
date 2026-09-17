@@ -9,7 +9,8 @@ import {
   runMeasurement,
   type ResultCache,
 } from "../core/measure";
-import { fmtUSD } from "../core/card";
+import { fmtUSD, summarizeRun } from "../core/card";
+import { runFingerprint } from "../core/measure";
 
 const localCache: ResultCache = {
   get(key) {
@@ -33,16 +34,20 @@ export function QualityLab({
   prompt,
   runs,
   setRuns,
+  maxTokens,
+  setMaxTokens,
 }: {
   prompt: string;
   runs: MeasureRun[];
   setRuns: (r: MeasureRun[]) => void;
+  /** Owned by App: it is part of the configuration a result is valid for. */
+  maxTokens: number;
+  setMaxTokens: (n: number) => void;
 }) {
   const [selected, setSelected] = useState<string[]>(["claude-haiku-4-5"]);
   const [samplesText, setSamplesText] = useState("");
   const [checkKind, setCheckKind] = useState<QualityCheck["kind"]>("json");
   const [checkValue, setCheckValue] = useState("");
-  const [maxTokens, setMaxTokens] = useState(300);
   const [service, setService] = useState<"checking" | "available" | "unavailable">("checking");
   const [configuredProviders, setConfiguredProviders] = useState<ModelSpec["provider"][]>([]);
   const [busy, setBusy] = useState(false);
@@ -141,6 +146,41 @@ export function QualityLab({
           : r,
       ),
     );
+  };
+
+  // Dev-only. Seeds each evidence state so the Lab can be demoed and checked
+  // without contacting a provider. `import.meta.env.DEV` is false in a
+  // production build, so this and its control are dropped from the bundle.
+  const seedDemo = (kind: "passed" | "failed" | "partial" | "stale") => {
+    const verdicts: Record<string, (boolean | null)[]> = {
+      passed: [true, true, true, true, true],
+      failed: [true, false, false, false, false],
+      partial: [true, null, null, null, null],
+      stale: [true, true, true, true, true],
+    };
+    const results: SampleResult[] = verdicts[kind].map((pass, i) => ({
+      input: `demo sample ${i + 1}`,
+      output: pass === false ? "sorry, I can't do that" : '{"category":"billing"}',
+      pass,
+      inputTokens: 120,
+      outputTokens: 40,
+      costUSD: 0.0002,
+      cached: false,
+      latencyMs: 480,
+    }));
+    setRuns([
+      {
+        modelId: selected[0] ?? MODELS[0].id,
+        check,
+        results,
+        totalCostUSD: 0.001,
+        ranAt: new Date().toISOString(),
+        // The stale case deliberately carries a fingerprint from a different
+        // configuration, which is what retires the stamp.
+        ranAgainst:
+          kind === "stale" ? "demo-other-configuration" : runFingerprint(prompt, maxTokens),
+      },
+    ]);
   };
 
   return (
@@ -242,15 +282,35 @@ export function QualityLab({
       )}
       {error && <div className="lab-error">{error}</div>}
 
+      {import.meta.env.DEV && (
+        <div className="lab-demo">
+          <span className="hint">Demo data (dev only, no provider call):</span>
+          {(["passed", "failed", "partial", "stale"] as const).map((k) => (
+            <button key={k} className="btn small" onClick={() => seedDemo(k)}>
+              {k}
+            </button>
+          ))}
+          <button className="btn small" onClick={() => setRuns([])}>
+            clear
+          </button>
+        </div>
+      )}
+
       {runs.map((r) => {
-        const judged = r.results.filter((s) => s.pass !== null);
-        const passed = judged.filter((s) => s.pass).length;
+        const st = summarizeRun(r);
+        const stale = r.ranAgainst !== runFingerprint(prompt, maxTokens);
         return (
           <div key={r.modelId}>
             <h3 style={{ marginTop: 18, fontSize: 14 }}>
-              {r.modelId}: <span className="num">{passed}/{judged.length || r.results.length} passed</span>{" "}
+              {r.modelId}:{" "}
+              <span className="num">
+                {st.passed}/{st.total} passed
+              </span>{" "}
               <span className="hint">
-                {fmtUSD(r.totalCostUSD)} spent{r.results.some((s) => s.cached) ? ", some cached" : ""}
+                {st.unreviewed > 0 ? `${st.unreviewed} unreviewed · ` : ""}
+                {fmtUSD(r.totalCostUSD)} spent
+                {r.results.some((s) => s.cached) ? ", some cached" : ""}
+                {stale ? " · stale, configuration changed" : ""}
               </span>
             </h3>
             <table className="results-table">

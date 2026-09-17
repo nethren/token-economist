@@ -180,6 +180,19 @@ export function cacheKey(modelId: string, prompt: string, sample: string, maxTok
   return `te-run-${modelId}-${(h >>> 0).toString(36)}-${s.length}`;
 }
 
+/**
+ * Identifies the exact prompt and reply cap a run measured, so a stamp earned
+ * on one configuration cannot follow the user to a different one. Stamped by
+ * the runner rather than the caller — a fingerprint you have to remember to
+ * attach is one you will forget.
+ */
+export function runFingerprint(prompt: string, maxTokens: number): string {
+  const s = `${prompt}\0${maxTokens}`;
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return `${(h >>> 0).toString(36)}-${s.length}`;
+}
+
 export async function runMeasurement(opts: {
   model: ModelSpec;
   prompt: string;
@@ -235,5 +248,6 @@ export async function runMeasurement(opts: {
     results,
     totalCostUSD: total,
     ranAt: new Date().toISOString(),
+    ranAgainst: runFingerprint(opts.prompt, opts.maxTokens),
   };
 }

@@ -21,6 +21,7 @@ const fakeRun = (modelId: string, passes: boolean[]): MeasureRun => ({
   })),
   totalCostUSD: 0.005,
   ranAt: "2026-07-12T00:00:00Z",
+  ranAgainst: "fp",
 });
 
 describe("recommendation policy", () => {
@@ -33,24 +34,24 @@ describe("recommendation policy", () => {
     const cheapest = [...estimates].sort(
       (a, b) => a.costPerMonth.point - b.costPerMonth.point,
     )[0];
-    for (const simpleTask of [true, false]) {
-      const rec = recommend(estimates, [], simpleTask);
-      expect(rec).not.toBeNull();
-      expect(rec!.verified).toBe(false);
-      expect(rec!.estimate.model.id).toBe(cheapest.model.id);
-      expect(rec!.reason.toLowerCase()).toContain("check");
-    }
+    const rec = recommend(estimates, [], "fp");
+    expect(rec).not.toBeNull();
+    expect(rec!.verified).toBe(false);
+    expect(rec!.estimate.model.id).toBe(cheapest.model.id);
+    // Evidence-status wording: lowest cost to TEST, with no capability claim.
+    expect(rec!.reason).toContain("Lowest estimated cost to test");
+    expect(rec!.reason).toContain("Quality has not been tested");
   });
 
   it("names a concrete step-up so 'if quality matters' has an answer", () => {
-    const rec = recommend(estimates, [], false);
+    const rec = recommend(estimates, [], "fp");
     expect(rec!.stepUp).not.toBeNull();
     expect(rec!.stepUp!.model.id).not.toBe(rec!.estimate.model.id);
     expect(rec!.reason).toContain(rec!.stepUp!.model.displayName);
   });
 
   it("builds a shortlist covering distinct tiers, cheapest first", () => {
-    const rec = recommend(estimates, [], false);
+    const rec = recommend(estimates, [], "fp");
     expect(rec!.shortlist.length).toBeGreaterThanOrEqual(2);
     expect(rec!.shortlist[0].label).toBe("start here");
     expect(rec!.shortlist[0].estimate.model.id).toBe(rec!.estimate.model.id);
@@ -65,7 +66,7 @@ describe("recommendation policy", () => {
     const cheap = getModel("gpt-5-mini");
     const expensive = getModel("claude-opus-4-8");
     const runs = [fakeRun(expensive.id, [true, true, true]), fakeRun(cheap.id, [true, true, true])];
-    const rec = recommend(estimates, runs, false);
+    const rec = recommend(estimates, runs, "fp");
     expect(rec!.verified).toBe(true);
     expect(rec!.estimate.model.id).toBe(cheap.id);
   });
@@ -75,7 +76,7 @@ describe("recommendation policy", () => {
       fakeRun("gpt-5-mini", [false, false, true]),
       fakeRun("claude-sonnet-5", [true, true, true]),
     ];
-    const rec = recommend(estimates, runs, false);
+    const rec = recommend(estimates, runs, "fp");
     expect(rec!.estimate.model.id).toBe("claude-sonnet-5");
   });
 });
@@ -90,13 +91,17 @@ describe("cost card", () => {
       assumptions: DEFAULT_ASSUMPTIONS,
       findings: [],
       runs: [fakeRun("claude-haiku-4-5", [true, true, false])],
-      recommendation: recommend(estimates, [], true),
+      recommendation: recommend(estimates, [], "fp"),
+      currentFingerprint: "fp",
       generatedAt: "2026-07-12",
     });
     expect(card).toContain("Recommendation");
     expect(card).toContain("Per month");
     expect(card).toContain("Assumptions behind these numbers");
-    expect(card).toContain("2/3 samples passed");
+    // The card reports the same counts the UI does, names the check that ran,
+    // and never collapses "reviewed" into "total".
+    expect(card).toContain("2/3 passed, 1 failed, 0 unreviewed");
+    expect(card).toContain("valid JSON check");
     expect(card).toContain("No model was called to produce this card");
   });
 });

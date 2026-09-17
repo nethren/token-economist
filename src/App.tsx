@@ -9,8 +9,9 @@ import {
 } from "./core/livePrices";
 import { countBaseTokens, humanSize, wordsFromTokens } from "./core/tokenizer";
 import { estimateAll } from "./core/estimate";
-import { isSimpleTask, lintPrompt } from "./core/lint";
+import { lintPrompt } from "./core/lint";
 import { recommend, renderCard } from "./core/card";
+import { runFingerprint } from "./core/measure";
 import {
   DEFAULT_ASSUMPTIONS,
   type LintAction,
@@ -143,6 +144,9 @@ export default function App() {
     RESTORED?.assumptions ?? DEFAULT_ASSUMPTIONS,
   );
   const [runs, setRuns] = useState<MeasureRun[]>([]);
+  // Lives here rather than inside the Lab because it is part of the
+  // configuration a quality result is valid for.
+  const [labMaxTokens, setLabMaxTokens] = useState(300);
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [models, setModels] = useState(MODELS);
@@ -200,9 +204,17 @@ export default function App() {
     [deferredPrompt, assumptions, models],
   );
 
+  // A quality result only describes the prompt and reply cap it was measured
+  // against. Runs are checked against this, so editing the prompt retires the
+  // evidence instead of letting it certify something it never saw.
+  const fingerprint = useMemo(
+    () => runFingerprint(deferredPrompt, labMaxTokens),
+    [deferredPrompt, labMaxTokens],
+  );
+
   const recommendation = useMemo(
-    () => recommend(estimates, runs, isSimpleTask(deferredPrompt)),
-    [estimates, runs, deferredPrompt],
+    () => recommend(estimates, runs, fingerprint),
+    [estimates, runs, fingerprint],
   );
 
   // Savings are priced against the model the tool actually recommends — the
@@ -224,8 +236,18 @@ export default function App() {
         findings,
         runs,
         recommendation,
+        currentFingerprint: fingerprint,
       }),
-    [featureName, deferredPrompt, estimates, assumptions, findings, runs, recommendation],
+    [
+      featureName,
+      deferredPrompt,
+      estimates,
+      assumptions,
+      findings,
+      runs,
+      recommendation,
+      fingerprint,
+    ],
   );
 
   const applyFix = (f: LintFinding) => {
@@ -302,8 +324,8 @@ export default function App() {
         <div className="brand">
           <svg className="mark" viewBox="0 0 28 28" aria-hidden="true">
             <rect x="1" y="1" width="26" height="26" rx="7" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.35" />
-            <rect x="7" y="13" width="14" height="2.5" rx="1.25" fill="currentColor" opacity="0.4" />
-            <rect x="13" y="8.5" width="2.5" height="11" rx="1.25" fill="var(--accent)" />
+            <path d="M7 10.75 q3.5 -2.5 7 0 t7 0" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" opacity="0.45" />
+            <path d="M7 17.25 q3.5 -2.5 7 0 t7 0" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" />
           </svg>
           <div className="brand-text">
             <h1>Token Economist</h1>
@@ -481,18 +503,51 @@ export default function App() {
           <section className="ctrl-sec" id="quality">
             <SecHead n={3} title="Quality check" lamp={verified ? "ok" : "todo"} />
             <div className={`labstatus ${verified ? "ok" : "todo"}`}>
-              {verified ? (
-                <>Passed. The recommendation now carries a verified stamp.</>
-              ) : runs.length > 0 ? (
-                <>Your check ran, but nothing has passed enough samples yet. The pick stays unverified.</>
-              ) : (
-                <>
-                  Optional, and a few cents. You can compute cost, but you have to watch quality: the
-                  pick stays <em>unverified</em> until a model passes your own check.
-                </>
-              )}
+              {(() => {
+                const st = recommendation?.status ?? null;
+                if (verified && st)
+                  return (
+                    <>
+                      {st.passed}/{st.total} passed the {st.checkName} check. The stamp covers that
+                      check only.
+                    </>
+                  );
+                if (st?.state === "stale")
+                  return (
+                    <>
+                      Stale: that result came from a different prompt or reply cap. Re-run the check
+                      to earn the stamp back.
+                    </>
+                  );
+                if (st?.state === "failed")
+                  return (
+                    <>
+                      Failed: {st.passed}/{st.total} passed the {st.checkName} check. The pick stays
+                      unverified.
+                    </>
+                  );
+                if (st && (st.state === "incomplete" || st.state === "unreviewed"))
+                  return (
+                    <>
+                      {st.reviewed} of {st.total} samples reviewed — judge the remaining{" "}
+                      {st.unreviewed} before this counts.
+                    </>
+                  );
+                return (
+                  <>
+                    Optional, and a few cents. You can compute cost, but you have to watch quality:
+                    the pick stays <em>unverified</em> until a model passes your own check.
+                  </>
+                );
+              })()}
             </div>
-            <QualityLab prompt={deferredPrompt} runs={runs} setRuns={setRuns} />
+            <QualityLab
+              prompt={deferredPrompt}
+              runs={runs}
+              setRuns={setRuns}
+              maxTokens={labMaxTokens}
+              setMaxTokens={setLabMaxTokens}
+            />
           </section>
 
           <div className="pricebar">
@@ -572,16 +627,37 @@ export default function App() {
           )}
 
           <footer className="foot">
+            <details className="more">
+              <summary>How this works</summary>
+              <div className="how-body">
+                <p>
+                  Models charge by the token. A token is a chunk of text about three quarters of a
+                  word long, so a short instruction like “classify this support ticket” costs about
+                  five.
+                </p>
+                <p>
+                  Your browser counts the tokens in your prompt and multiplies them by the price
+                  each provider publishes. That includes everything one request carries: your
+                  instructions, the user’s message, earlier turns you resend, any retrieved text,
+                  and the reply that comes back. Multiply by how often the feature runs and you have
+                  the monthly bill.
+                </p>
+                <p>
+                  You never send your prompt to a model to get this estimate, so the same prompt and
+                  the same assumptions give you the same number every time.
+                </p>
+                <p>
+                  You see a range because two things stay unknown until you ship: how long each
+                  reply runs, and how providers other than OpenAI split text into tokens. Set a
+                  reply limit and the range narrows.
+                </p>
+              </div>
+            </details>
             <div className="trust">
               <span>Ranges, not quotes</span>
               <span>Cost path never calls a model</span>
               <span>Prompt stays in your tab</span>
             </div>
-            <p>
-              Your prompt only leaves the tab when you run a quality check. Prices auto-refresh from a
-              public list; the eval suite (npm run eval) proves the cost path never touches the
-              network.
-            </p>
           </footer>
         </main>
       </div>

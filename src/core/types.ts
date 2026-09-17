@@ -185,4 +185,11 @@ export interface MeasureRun {
   results: SampleResult[];
   totalCostUSD: number;
   ranAt: string;
+  /**
+   * Fingerprint of the prompt and reply cap this run measured. Evidence is
+   * only valid for the configuration it was collected against: edit the
+   * prompt and the run becomes stale rather than certifying something it
+   * never saw.
+   */
+  ranAgainst: string;
 }
