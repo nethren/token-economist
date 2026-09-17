@@ -143,6 +143,30 @@ banner and advanced summary measured 6.7:1 or better in both themes.
 fixture corpus of real outputs from several AI tools, so heading shapes outside
 the tested set may still need a warning-and-retry from the user.
 
+## Size-field browser pass (D28, 2026-09-18)
+
+Checked against the dev server at 1440 px and 390 px, both themes.
+
+**Confirmed.** All three entry modes on the reply-length field: a named size
+resolves and prints its token figure; "Measure a real example" opens a 62 px
+box and counts a pasted reply exactly (31 tokens from a three-sentence reply);
+"Enter the number myself" keeps a hand-typed 145 as 145 rather than relabelling
+it "a short paragraph". Clearing the number box keeps the field in custom mode
+instead of selecting an option absent from the list. Clicking a template resets
+both fields to their named size and clears any half-typed sample. No console
+errors; the Quality Lab is unaffected.
+
+**Fixed during the pass.** At 390 px the two size fields sat in the two-column
+grid at 170 px each, wrapping their labels onto two lines, misaligning the two
+selects, and leaving the measure box too narrow to read a pasted example. Both
+now span the full row.
+
+**Contrast.** Worst measured value across the new controls in both themes is
+4.96:1 (the hint line in light mode), above the 4.5:1 AA threshold. Select and
+sample-box text measure 15.8–16.7:1; the size label 7.2–8.8:1. Measured with
+transitions disabled, after the mid-transition false readings recorded in the
+Phase 1 record.
+
 ## Recommended CI gate
 
 Suggested, not installed:

@@ -238,7 +238,13 @@
   gap: 2px 14px;
 }
 
-/* a length asked for in words, answered in tokens */
+/* A length asked for in words, answered in tokens. Full width: the labels are
+   sentences rather than field names, and the measure box needs somewhere to
+   put a pasted example. */
+.sizefield {
+  grid-column: 1 / -1;
+}
+
 .sizefield select {
   width: 100%;
 }
