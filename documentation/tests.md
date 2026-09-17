@@ -1,6 +1,6 @@
 # Test coverage
 
-The default deterministic gate is `npm test`: 100 tests pass across six test
+The default deterministic gate is `npm test`: 104 tests pass across six test
 files. Five provider-truth tests are skipped unless `ANTHROPIC_API_KEY` is
 deliberately supplied. Nothing in the application can contact a model provider,
 so `eval:live` is the only path in the repository that reaches one, and it hits
@@ -22,6 +22,7 @@ enforces it.
 | Quality status accounting | Total, reviewed, passed, failed and unreviewed are tracked separately; only a fully reviewed run at ≥80% can verify; an observed failure is reported as a failure, never as "no quality data"; the interface and the card print the same counts | Partial review certifying a model, or a failure reported as missing data, fails | `tests/quality-status.test.ts` | Unit | Existing |
 | Evidence-aware wording | Before testing the copy is "lowest estimated cost to test" with no task-capability claim; the lexical hint is anchored on both sides, so "spelling", "moderately" and "labelled" no longer register as bounded tasks | A keyword match that changes the recommendation's evidence language fails | `tests/quality-status.test.ts` | Unit | Existing |
 | Evidence staleness | A run carries the fingerprint of the prompt and reply cap it measured; once either changes the run reports as stale, never as passed, failed or missing, and the card marks it | A run verifying against a configuration it never measured fails | `tests/quality-status.test.ts` | Unit | Existing |
+| Plain-language sizes | Size tables ascend with unique ids and labels; `matchSize` is exact, so a hand-entered number is never relabelled as a rounder one; every preset resolves to a named size | A nearest-neighbour match, or a preset landing on the raw number box, fails | `src/core/sizes.ts`; `tests/improvements.test.ts` | Unit | Existing |
 | Share link | State round-trips in a URL-safe fragment; garbage and unknown fields fail safely | Invalid input returns null/defaults instead of throwing | `flows.md` §3; `tests/improvements.test.ts` | Unit | Existing |
 | Price refresh | Only valid positive mapped prices apply; malformed/missing rows preserve snapshots; cache and offline fallback behave | Corrupt cache or payload cannot replace registry values | `flows.md` §2; `tests/improvements.test.ts` | Unit | Existing |
 | Bring-your-own evidence | Pasted replies are scored offline, labelled `source: "byo"`, and bound to the prompt and cap they were collected against | A run that verifies a configuration it never saw, or loses its provenance, fails | `flows.md` §4; `tests/card-measure.test.ts` | Unit | Existing |

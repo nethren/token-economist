@@ -7,7 +7,8 @@ import {
   rememberPrices,
   PRICE_SOURCE_NAME,
 } from "./core/livePrices";
-import { countBaseTokens, humanSize, wordsFromTokens } from "./core/tokenizer";
+import { countBaseTokens, humanSize } from "./core/tokenizer";
+import { INPUT_SIZES, OUTPUT_SIZES } from "./core/sizes";
 import { estimateAll } from "./core/estimate";
 import { lintPrompt } from "./core/lint";
 import { recommend, renderCard } from "./core/card";
@@ -21,6 +22,7 @@ import {
 } from "./core/types";
 import { ModelTable } from "./components/ModelTable";
 import { QualityLab } from "./components/QualityLab";
+import { SizeField } from "./components/SizeField";
 import { Receipt } from "./components/Receipt";
 import { PRESETS, type FeaturePreset } from "./core/presets";
 import { decodeShareState, encodeShareState } from "./core/share";
@@ -53,6 +55,16 @@ function InfoDot({ what, tip }: { what: string; tip?: string }) {
       </span>
     </span>
   );
+}
+
+/** A monthly volume is hard to picture; the daily rate it implies is not, and
+ *  the mismatch is where an order-of-magnitude slip shows up. */
+function perDayHint(perMonth: number): string {
+  if (perMonth <= 0) return "";
+  const perDay = perMonth / 30;
+  if (perDay < 1) return `≈ ${Math.round(perMonth / 4.3)} a week`;
+  if (perDay < 100) return `≈ ${Math.round(perDay)} a day`;
+  return `≈ ${Math.round(perDay).toLocaleString("en-US")} a day`;
 }
 
 function NumField({
@@ -140,6 +152,7 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
 export default function App() {
   const [featureName, setFeatureName] = useState(RESTORED?.featureName ?? "");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [formSeq, setFormSeq] = useState(0);
   const [prompt, setPrompt] = useState(RESTORED?.prompt ?? "");
   const [assumptions, setAssumptions] = useState<ScaleAssumptions>(
     RESTORED?.assumptions ?? DEFAULT_ASSUMPTIONS,
@@ -273,6 +286,10 @@ export default function App() {
     setFeatureName(p.featureName);
     setPrompt(p.prompt);
     setAssumptions(p.assumptions);
+    // Remounts the size fields, so a template's values show as the named size
+    // they are rather than staying in whichever entry mode was open, and any
+    // half-typed sample is cleared with them.
+    setFormSeq((n) => n + 1);
   };
 
   /** Manual force-refresh (skips the cache). Downloads a public price
@@ -345,7 +362,9 @@ export default function App() {
           <section className="ctrl-sec">
             <SecHead n={1} title="The prompt" />
             <div className="presetbar" role="group" aria-label="Feature templates">
-              <span className="presetbar-label">Start from a template</span>
+              <span className="presetbar-label">
+                Start from a template — fills the prompt and the scale
+              </span>
               <div className="preset-chips">
                 {PRESETS.map((p) => (
                   <button key={p.id} className="chip" title={p.blurb} onClick={() => applyPreset(p)}>
@@ -389,37 +408,43 @@ export default function App() {
                 value={assumptions.requestsPerMonth}
                 onChange={(n) => set("requestsPerMonth", n ?? 0)}
                 step={1000}
+                hint={perDayHint(assumptions.requestsPerMonth)}
                 what="Separate requests your feature handles each month."
-                tip="One user asking one thing = one. A rough order of magnitude is enough."
+                tip="People who'll use it × how often each. A rough order of magnitude is enough."
               />
               <NumField
                 label="Turns / conversation"
                 value={assumptions.turnsPerConversation}
                 onChange={(n) => set("turnsPerConversation", Math.max(1, n ?? 1))}
                 min={1}
+                hint={
+                  assumptions.turnsPerConversation === 1
+                    ? "one-shot: ask once, answer once"
+                    : "each turn re-sends the earlier ones"
+                }
                 what="Back-and-forth exchanges in one conversation."
-                tip="A one-shot task is 1; a short chat, 3–5. Each turn re-sends the earlier ones."
+                tip="A one-shot task is 1; a short chat, 3–5."
               />
-              <NumField
-                label="User tokens / turn"
+              <SizeField
+                key={`in-${formSeq}`}
+                label="What users send each turn"
                 value={assumptions.avgUserInputTokens}
                 onChange={(n) => set("avgUserInputTokens", n ?? 0)}
-                step={50}
-                hint={`≈ ${wordsFromTokens(assumptions.avgUserInputTokens)} words`}
-                what="Text you send the model each turn."
-                tip="A token ≈ ¾ of a word. 150 tokens ≈ 110 words."
+                options={INPUT_SIZES}
+                sampleLabel="Paste a typical user message and we'll count it exactly…"
+                what="The text going in each turn: the user's message, plus anything you attach."
+                tip="Pick the closest size, or paste a real one to measure it."
               />
-              <NumField
-                label="Expected reply tokens"
+              <SizeField
+                key={`out-${formSeq}`}
+                label="How long each reply is"
                 value={assumptions.expectedOutputTokens}
                 onChange={(n) => set("expectedOutputTokens", n)}
-                hint={
-                  assumptions.expectedOutputTokens != null
-                    ? `≈ ${wordsFromTokens(assumptions.expectedOutputTokens)} words`
-                    : "blank = unknown (flagged)"
-                }
-                what="How long you expect each reply to be."
-                tip="This drives cost the most. Leave blank if unsure; we'll flag it."
+                options={OUTPUT_SIZES}
+                unknownLabel="Not sure yet"
+                sampleLabel="Paste a reply you'd be happy with and we'll count it exactly…"
+                what="How much the model writes back each turn."
+                tip="This drives cost more than anything else. Measure one if you can."
               />
             </div>
 

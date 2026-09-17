@@ -238,6 +238,51 @@
   gap: 2px 14px;
 }
 
+/* a length asked for in words, answered in tokens */
+.sizefield select {
+  width: 100%;
+}
+
+/* `.field textarea` sets a 210px min-height for the prompt box and would win
+   on specificity, so this one qualifies itself back up. */
+.field textarea.sizefield-sample {
+  width: 100%;
+  margin-top: 6px;
+  min-height: 62px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text);
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.field input[type="number"].sizefield-num {
+  width: 100%;
+  margin-top: 6px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.field textarea.sizefield-sample:focus,
+.field input[type="number"].sizefield-num:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.sizefield .hint strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .assume-grid .wide {
   grid-column: 1 / -1;
 }

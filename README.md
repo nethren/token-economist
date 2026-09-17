@@ -100,7 +100,10 @@ Anthropic and Google counts remain estimates, so the interface shows a range
 instead of false precision.
 
 You supply the expected output length because no calculator can count a reply
-before the model writes it. The estimator then prices the full request model:
+before the model writes it — but you give it in words, not tokens. Pick a size
+you can picture ("a short paragraph"), or paste a reply you would be happy with
+and the bundled tokenizer counts it exactly. The token figure it resolves to is
+always shown, so the conversion stays visible. The estimator then prices the full request model:
 fixed instructions, user input, conversation history, retrieved data, tools,
 reasoning tokens, caching, retries, and batch discounts.
 

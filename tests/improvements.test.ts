@@ -13,6 +13,7 @@ import {
 } from "../src/core/livePrices";
 import { afterEach, vi } from "vitest";
 import { PRESETS } from "../src/core/presets";
+import { INPUT_SIZES, OUTPUT_SIZES, matchSize } from "../src/core/sizes";
 import { BLOATED_PROMPT } from "./fixtures";
 
 const model = getModel("claude-haiku-4-5");
@@ -295,6 +296,32 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
   });
 });
 
+/**
+ * The interface asks for lengths in words a person can picture and converts to
+ * tokens. These guard the conversion table itself.
+ */
+describe("plain-language sizes", () => {
+  for (const [name, options] of [
+    ["input", INPUT_SIZES],
+    ["output", OUTPUT_SIZES],
+  ] as const) {
+    it(`${name} sizes ascend, with unique ids and labels`, () => {
+      const tokens = options.map((o) => o.tokens);
+      expect([...tokens].sort((a, b) => a - b)).toEqual(tokens);
+      expect(new Set(options.map((o) => o.id)).size).toBe(options.length);
+      expect(new Set(options.map((o) => o.label)).size).toBe(options.length);
+      expect(tokens.every((t) => t > 0)).toBe(true);
+    });
+  }
+
+  it("matches exactly, so a hand-entered number is never relabelled", () => {
+    expect(matchSize(150, INPUT_SIZES)?.id).toBe("paragraph");
+    // 145 is close to "a paragraph" but is not it — the user chose that number.
+    expect(matchSize(145, INPUT_SIZES)).toBeNull();
+    expect(matchSize(null, OUTPUT_SIZES)).toBeNull();
+  });
+});
+
 describe("feature presets", () => {
   it("every preset estimates cleanly on every model", () => {
     for (const p of PRESETS) {
@@ -315,6 +342,15 @@ describe("feature presets", () => {
     expect(byId.get("support-bot")!.assumptions.turnsPerConversation).toBeGreaterThan(1);
     expect(byId.get("summarizer")!.assumptions.useBatch).toBe(true);
     expect(new Set(PRESETS.map((p) => p.id)).size).toBe(PRESETS.length);
+  });
+
+  it("every preset lands on a named size, not a raw number box", () => {
+    // A template that drops the user into "Enter the number myself" looks
+    // unfinished the moment they click it.
+    for (const p of PRESETS) {
+      expect(matchSize(p.assumptions.avgUserInputTokens, INPUT_SIZES), `${p.id} input`).not.toBeNull();
+      expect(matchSize(p.assumptions.expectedOutputTokens, OUTPUT_SIZES), `${p.id} output`).not.toBeNull();
+    }
   });
 
   it("presets round-trip through the permalink codec", () => {

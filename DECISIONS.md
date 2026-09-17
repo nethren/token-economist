@@ -673,3 +673,46 @@ prose answer and a bare JSON answer, read 3 of 3, score 2/3 as failed, then edit
 the prompt and confirm the amber mismatch warning and the STALE card line.
 Contrast for the new parse banner and advanced summary measured above 6.7:1 in
 both themes.
+
+## 2026-09-17 — D28: Ask for lengths in words, not tokens
+
+D27 cut the scale form to four fields but did not ask whether those four were
+answerable. Two of them were not. "User tokens / turn" and "Expected reply
+tokens" are denominated in a unit nobody can estimate by eye: a PM knows the
+reply is a short paragraph, and has no idea whether that is 60 tokens or 600.
+The fields carried a words hint, but backwards — you had to supply the token
+number to be told the word count. So the honest answer for most people was a
+guess, on the input the tool itself calls the biggest cost driver.
+
+Both are now a single select of sizes a person can picture — "a short message",
+"a few paragraphs", "a page" — with two escape hatches in the same list:
+
+- **Measure a real example.** Paste a typical message or a reply you would be
+  happy with, and the bundled tokenizer counts it exactly. This is the one that
+  matters. The tokenizer already ships for the prompt box, so a guess becomes a
+  measurement at no cost, and it is one click away rather than behind an
+  advanced panel.
+- **Enter the number myself**, for anyone who already knows.
+
+The resolved token figure is always shown under the control, so the conversion
+is visible rather than hidden, and picking a size never pretends to be more
+precise than it is.
+
+`matchSize` is exact rather than nearest-neighbour. A hand-entered 145 is not
+"a paragraph", and quietly relabelling it would overwrite a number the user
+chose on purpose; an unmatched value keeps the custom input visible instead.
+Preset assumptions were nudged onto named sizes so clicking a template never
+drops you into a raw number box — a template that lands on "Enter the number
+myself" looks unfinished the moment you click it.
+
+Conversations per month keeps its number, because that unit is one people do
+think in, but it now shows the daily rate it implies. A monthly figure is hard
+to picture and an order-of-magnitude slip is invisible in it; "≈ 330 a day" is
+where that error surfaces. The tooltip also names the two numbers it is
+actually made of: people who will use it, times how often each.
+
+The template bar now says it fills the scale as well as the prompt. It always
+did; nobody could tell.
+
+Verification: lint clean, 104 tests passing (4 new, on the size tables and
+preset alignment), build clean.
