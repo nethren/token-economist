@@ -13,8 +13,9 @@
 | `permissions.md` | Present | Single-user capability matrix and enforcement |
 | `variables.md` | Present | Secrets, rotation, pre-publication checks |
 | `automation.md` | Present | Quality Lab trigger, absent API surface, guardrails |
-| `seo.md` | Present | Single public SPA route; final-domain metadata backlog |
-| `tests.md` | Present | Existing/proposed/gap separation and CI recommendation |
+| `seo.md` | Present | Single public SPA route and final-domain social metadata |
+| `tests.md` | Present | Existing/proposed/gap separation and CI coverage |
+| `deployment.md` | Present | Vercel preview, custom-domain, smoke and rollback procedure |
 | Email / cron docs | N/A | No email or scheduled work exists |
 
 ## Agent context
@@ -27,9 +28,10 @@
 | Gate | Result |
 |---|---|
 | `npm run lint` | Pass |
-| `npm test` | 88 passed; 5 guarded-live tests skipped |
+| `npm test` | 104 passed; 5 guarded-live tests skipped |
 | `npm run build` | Pass |
-| `npm audit` | 0 known vulnerabilities after compatible transitive updates |
+| `npm run verify:bundle` | Pass; no paid-provider client surface in `dist` |
+| `npm audit` | 2 moderate advisories in the development-only Vitest toolchain; no production dependency affected |
 | Secret-pattern scan | No credentials found; only empty `.env.example` present |
 | Paid-path absence | `dist` grepped for provider hostnames, key identifiers, and the dev fixture: zero hits |
 
@@ -37,9 +39,10 @@
 
 The deterministic estimate, cost math, linter, recommendation, price fallback,
 share codec, quality-status accounting, evidence staleness, check-pack contents,
-and pasted-reply scoring are covered. The main gaps are a committed
-no-paid-path guard, accessibility automation, and a bundle budget. Self-reported
-evidence is a designed-in limitation rather than a coverage gap. See
+and pasted-reply scoring are covered. CI also builds the production bundle and
+checks it for provider endpoints and key identifiers. The main gaps are
+accessibility automation and a bundle budget. Self-reported evidence is a
+designed-in limitation rather than a coverage gap. See
 [tests.md](tests.md).
 
 ## Security summary
@@ -64,8 +67,8 @@ stopped them at the sink:
 
 The root risk theme is now disclosure, not spend: a share link and a check pack
 both carry the prompt, by design and behind an explicit user action. There is no
-credential to leak and no paid path to abuse. What remains unverified is a
-committed regression guard against a future change reintroducing one.
+credential to leak and no paid path to abuse. CI runs a committed production-
+bundle guard against a future change reintroducing a paid-provider client.
 
 ## Performance summary
 
@@ -123,10 +126,10 @@ rate limits, and abuse prevention, and this packet does not approve one.
 
 ## Recommended next actions
 
-1. Publish the source repository and add it to the portfolio index.
-2. Add the proposed GitHub Actions verification workflow after owner approval,
-   then require it on `main`.
-3. Add a committed test asserting the bundle contains no provider client.
-4. Refresh the screenshot after final browser QA.
-5. If deploying the static estimator, add final-domain SEO/social metadata and
-   measure the tokenizer bundle on a real connection.
+1. Deploy a Vercel preview and verify the critical flows in a real browser.
+2. Attach `tokenecon.nethren.com`, add its DNS-only Cloudflare CNAME, and verify
+   HTTPS before treating the deployment as production-ready.
+3. Require the GitHub Actions check on `main` after the first green run.
+4. Refresh the screenshot if production QA reveals any visual drift.
+5. Measure the tokenizer bundle on a real connection and decide whether its
+   load time warrants lazy loading or a worker.

@@ -6,9 +6,9 @@ deliberately supplied. Nothing in the application can contact a model provider,
 so `eval:live` is the only path in the repository that reaches one, and it hits
 a free token-counting endpoint.
 
-There is no CI workflow or protected-branch status check yet. “Existing”
-below means a test is present in this repository, not that GitHub currently
-enforces it.
+`.github/workflows/ci.yml` runs lint, all deterministic tests, the production
+build and a no-paid-provider bundle guard on pushes and pull requests. The
+repository does not yet require that check through a protected-branch rule.
 
 ## Existing coverage
 
@@ -33,12 +33,12 @@ enforces it.
 | Declared configuration wins | A pasted document that names a configuration id is stamped with it, so evidence from an earlier prompt reports stale | Re-badging old evidence as current fails | `flows.md` §4; `tests/card-measure.test.ts` | Unit | Existing |
 | Provenance on the card | The card attributes evidence to the author and marks demo data as demo data | Demo data rendering as a measurement fails | `tests/card-measure.test.ts` | Unit | Existing |
 | Provider token calibration | Anthropic truth falls inside the band and point error is within ±12% | Out-of-band counts fail | `EVAL.md`; `tests/live-accuracy.test.ts` | Guarded live | Existing, opt-in |
+| No-provider-client guard | The production bundle contains no provider hostname, provider-key identifier or direct-browser provider flag | A reintroduced paid path fails CI after the build | `scripts/check-static-bundle.mjs`; `.github/workflows/ci.yml` | Build gate | Existing |
 
 ## Proposed tests
 
 | Proposed case | Assertion and negative case | Type |
 |---|---|---|
-| No-provider-client guard | Assert the built bundle contains no provider hostname, `Authorization` header construction, or API-key identifier; a reintroduced paid path fails the build gate | Unit, on `dist` |
 | Price-fetch privacy | Stub `fetch` and assert the fixed URL, GET semantics, and absence of prompt/sample data | Unit |
 | Check-pack round trip | Parse an exported pack, confirm its fingerprint matches the live configuration, and confirm an edited prompt makes the pasted run stale | Unit |
 | Dev-fixture absence | Render a production build and assert the demo controls are not present | Integration, deterministic |
@@ -55,11 +55,9 @@ enforces it.
    from the offline tokenizer, not from provider-reported usage, so they carry
    the same calibration error as the rest of the estimate. Labelled as
    estimates in the results table.
-3. **No-paid-path guard:** the absence of a provider client is verified by
-   grepping `dist` by hand, not by a committed test.
-4. **Accessibility and visual quality:** documented design checks remain
+3. **Accessibility and visual quality:** documented design checks remain
    manual because the repository has no browser test harness.
-5. **Bundle budget:** production build reports size, but no automated threshold
+4. **Bundle budget:** production build reports size, but no automated threshold
    guards the 1.11 MB gzip initial JavaScript bundle.
 
 ## Phase 1 verification record (TE-01 / TE-02, 2026-09-15)

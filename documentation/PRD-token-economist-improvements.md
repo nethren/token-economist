@@ -1,8 +1,8 @@
 # Token Economist — Improvement PRD
 
-**Status:** Draft for owner review; no implementation authorised by this document alone  
-**Prepared:** 14 September 2026, by Codex for the project owner  
-**Basis:** Hands-on evaluation using APIFit's four AI prompts, public weather documentation, offline counterexamples and code inspection  
+**Status:** Draft for owner review; no implementation authorised by this document alone
+**Prepared:** 14 September 2026, by Codex for the project owner
+**Basis:** Hands-on evaluation using APIFit's four AI prompts, public weather documentation, offline counterexamples and code inspection
 **Recommended order:** Repair trust → support complete workflow costs → improve quality-test fidelity
 
 ## 1. Executive summary
