@@ -82,8 +82,8 @@ bundle guard against a future change reintroducing a paid-provider client.
   tokenizer in a worker or lazy chunk while preserving offline behavior and an
   honest loading state.
 - **Effort:** Medium
-- **Priority:** Medium before deploying a public demo; low for source-only
-  GitHub publication.
+- **Priority:** Medium as a post-launch performance improvement; it is not a
+  correctness or privacy blocker.
 - **Expected effect:** Faster first load and less main-thread parse work.
 
 ### Recalculation path
@@ -117,7 +117,9 @@ No material documented/implemented mismatch survived review.
 
 ## Launch blockers
 
-None for publishing the source as a public GitHub portfolio repository.
+None. The source is public and the complete static product is deployed at
+<https://tokenecon.nethren.com/>. The deployed commit passed CI, Vercel reports
+the custom domain as valid, and the final HTTPS and 390 px browser checks pass.
 
 Deploying the static build is now approved in full, Quality Lab included: it
 holds no secret and spends no money. Adding a hosted paid-call backend would be
@@ -126,10 +128,9 @@ rate limits, and abuse prevention, and this packet does not approve one.
 
 ## Recommended next actions
 
-1. Deploy a Vercel preview and verify the critical flows in a real browser.
-2. Attach `tokenecon.nethren.com`, add its DNS-only Cloudflare CNAME, and verify
-   HTTPS before treating the deployment as production-ready.
-3. Require the GitHub Actions check on `main` after the first green run.
-4. Refresh the screenshot if production QA reveals any visual drift.
-5. Measure the tokenizer bundle on a real connection and decide whether its
+1. Require the green GitHub Actions check on `main` through branch protection.
+2. Measure the tokenizer bundle on a real connection and decide whether its
    load time warrants lazy loading or a worker.
+3. Add automated accessibility coverage for the highest-value interaction
+   paths.
+4. Refresh the screenshot if production QA reveals any visual drift.

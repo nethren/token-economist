@@ -32,6 +32,24 @@ plugins and all other network destinations.
 
 Deploy and verify a preview before promoting a production build.
 
+## Production record
+
+Production launched on 2026-09-18 from commit `e45bce2`:
+
+- **Public origin:** <https://tokenecon.nethren.com/>
+- **Vercel project:** `token-economist` in the existing
+  `nethrens-projects` Hobby team
+- **Vercel alias:** <https://token-economist-lilac.vercel.app/>
+- **Cloudflare DNS:** `tokenecon` CNAME to
+  `c300c3b39a6bbc58.vercel-dns-017.com`, DNS-only, automatic TTL
+- **Secrets and environment variables:** none
+
+The GitHub Actions release gate passed for the deployed commit. Vercel reports
+the custom domain as valid, HTTPS returns `200`, and the production response
+includes the committed security headers. A browser smoke test confirmed the
+app title and first screen at desktop and 390 px; at 390 px the document and
+viewport widths are both 390 px, with no horizontal overflow.
+
 ## Preview checks
 
 1. Confirm the title, favicon, canonical URL and social metadata.
@@ -48,11 +66,10 @@ Deploy and verify a preview before promoting a production build.
 
 ## Custom domain and DNS
 
-Attach `tokenecon.nethren.com` to the Vercel project. Vercel will return the
-exact CNAME target for the project. In Cloudflare, create only the requested
-DNS-only CNAME for `tokenecon`; do not change the zone apex, APIFit or other
-portfolio records. Verify Vercel domain ownership, TLS issuance and the final
-HTTPS response before treating the deployment as ready.
+`tokenecon.nethren.com` is attached to the Vercel project. Cloudflare contains
+only the requested DNS-only CNAME for `tokenecon`; the zone apex, APIFit and
+other portfolio records were not changed. Vercel domain validation, TLS
+issuance and the final HTTPS response have been verified.
 
 ## Rollback
 

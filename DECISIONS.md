@@ -716,3 +716,25 @@ did; nobody could tell.
 
 Verification: lint clean, 104 tests passing (4 new, on the size tables and
 preset alignment), build clean.
+
+## 2026-09-18 — D29: Ship the complete static product at tokenecon.nethren.com
+
+Token Economist is deployed as a static Vite application in the same Vercel
+Hobby team used by APIFit. The production project is connected to the public
+GitHub repository, so the hosted product follows `main`; no runtime secret or
+environment variable was added. Vercel runs `npm run check`, which makes lint,
+the deterministic test suite, the production build, and the paid-provider
+bundle guard one release gate.
+
+The public origin is `https://tokenecon.nethren.com/`. Cloudflare holds one
+DNS-only CNAME for `tokenecon`, pointing at the project-specific Vercel target.
+Keeping the Cloudflare proxy off matches Vercel's requested configuration and
+leaves certificate issuance and static delivery with Vercel. The zone apex,
+APIFit record, and every other DNS record were left alone.
+
+Production was verified from commit `e45bce2`: GitHub Actions passed, Vercel
+reported the domain configuration valid, HTTPS returned `200` with the
+committed security headers, and the canonical and social metadata named the
+final origin. A real-browser check at 390 px found no horizontal overflow. The
+1.11 MB gzip tokenizer bundle remains a measured performance limit, not a
+deployment, privacy, or correctness blocker.

@@ -16,6 +16,9 @@ candidate against your own definition of “good enough.”
 
 ![Token Economist](docs/screenshot.png)
 
+**[Try Token Economist](https://tokenecon.nethren.com/)** — the hosted app is
+the complete product and does not require an account or API key.
+
 ## A quick example
 
 Suppose you're scoping a customer support chatbot for 80,000 conversations a
