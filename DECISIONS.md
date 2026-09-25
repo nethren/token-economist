@@ -738,3 +738,141 @@ committed security headers, and the canonical and social metadata named the
 final origin. A real-browser check at 390 px found no horizontal overflow. The
 1.11 MB gzip tokenizer bundle remains a measured performance limit, not a
 deployment, privacy, or correctness blocker.
+
+## 2026-09-24 — D30: Ink & cobalt, and open on the answer
+
+An impeccable critique scored the v5 interface 26/40. Nothing blocked the
+task, but four problems were major, and none of them was the palette:
+
+- A first visit landed on an empty form, so a recruiter or PM saw no answer
+  and no sign of who built it.
+- On a 390px phone the estimate began 2,140px down, and choosing a template
+  changed nothing visible.
+- The quality check tested Claude Haiku 4.5 by default while the
+  recommendation was GPT-5 mini, and explained itself four times.
+- Choosing a template silently replaced a prompt the user had pasted.
+
+The browser detector also flagged the cream background and roughly 25 blocks
+of 9–11.5px text.
+
+Changes:
+
+- **Open on the answer (reverses D21).** The first visit loads the support
+  chatbot example, labelled "You're looking at the support chatbot example",
+  with one click to start blank. D21 made inputs empty so the tool would not
+  appear to price someone else's prompt. The label keeps that honesty, and
+  the pre-filled answer is what lets a first-time visitor understand the
+  product. Share links still restore exactly what they carry, and show no
+  example label.
+- **Undo instead of silent replacement.** Loading an example over the user's
+  own prompt, applying a lint fix and starting blank each offer Undo in a
+  toast. Switching between examples offers nothing, since nothing is lost.
+- **The quality check tests the recommended model.** It defaults to the
+  recommended model, and a manual choice sticks. Its explanation appears once.
+  Sub-steps are named by verb, not numbered inside step 3. It is a
+  full-width, three-part section after the estimate instead of a rail entry
+  behind a nested scroll area.
+- **No nested scroll.** The page scrolls normally. Once the verdict leaves the
+  viewport, the answer (model, monthly cost, range, badge) appears in the
+  header on wide screens and as a bottom bar on phones.
+- **Visual system v6 (DESIGN.md):**
+  - A neutral canvas replaces cream, with a cobalt accent for actions and the
+    recommended pick.
+  - Instrument Sans with tabular figures replaces Geist. Mono is kept only
+    for pasted text.
+  - A 15px base size, with no text under 12px.
+  - Sentence-case headings replace tracked uppercase labels.
+  - An unrotated badge replaces the rubber stamp.
+  - The monthly figure gets a drawn likely-range band.
+- **Colour semantics.** The money split used to be painted green, red and
+  amber, which read as good and bad. It now uses validated categorical series
+  in a fixed entity order. Switches are cobalt, not green.
+- **Theme before paint.** `public/theme.js`, loaded same-origin because the
+  CSP forbids inline script, sets `data-theme` before first paint, so dark
+  users no longer see a light flash.
+
+The owner's APIFit project was the stated reference for good output, and its
+recorded direction was followed: no cream, one deep accent, near-black dark
+mode, Instrument Sans (the same OFL file), readable sizes, dividers over
+cards, and motion only in response to the user. The example prompt's "Acme"
+placeholder became "Plotline".
+
+Verification: 104 tests passing, lint clean, build and bundle guard clean.
+Browser checks passed at 1440px and 390px in both themes, with no horizontal
+overflow. The browser detector went from 44 findings to 23. The remaining
+hits are hidden tooltips (false positives), and the font and single-family
+rules, where Instrument Sans is the owner's choice. Contrast was measured for
+every text pair.
+
+## 2026-09-25 — D31: The demo path shows the whole product
+
+A second impeccable critique scored the v6 interface 31/40, up from 26. Its
+one major finding was that the path a recruiter or PM actually clicks never
+showed two of the product's three promises:
+
+- None of the five examples triggered a "Make it cheaper" suggestion.
+- The quality check stayed disabled until the visitor typed test inputs.
+
+Changes:
+
+- **The support-chatbot example is a first draft with two realistic
+  mistakes.** Its hand-off rule is pasted twice, and it has no reply limit.
+  The example notice says so, so the planted mistakes are labelled, not
+  passed off as a finished prompt. The other four examples stay clean.
+- **Every example carries test inputs and a pass rule** (`FeaturePreset.check`).
+  The quality check can be downloaded in one click. A blank start or a
+  shared link begins with none.
+- **The reply-limit finding is labelled as risk, not savings.** The engine
+  already models replies at up to 1.5× the expected length, and the suggested
+  cap sits just above that, so applying it does not move the estimate. Showing
+  "Save $0–$13/mo" implied it would. The interface now shows "Caps up to
+  $13/mo of overrun" in neutral ink. The linter's number, and the test that
+  every finding is quantified, are unchanged.
+- **Finding copy is written for PMs.** For example, "Static prefix should use
+  prompt caching" became "Reuse the fixed part of the prompt (prompt
+  caching)". Rule ids, amounts, the "Q&A / FAQ" label and the model name in
+  the cheaper-tier title are unchanged, and those are what the tests pin.
+  Explanations are shown in full, and findings past the top three open in
+  place instead of living only in the Markdown card.
+- **One-click assumption fixes (cap, caching) offer Undo,** like prompt fixes.
+- **Tablet layout.** Two columns from 960px. The quality check is two-up
+  between 760 and 1199px, which ends the truncated model dropdown at 1024px.
+- **Dark-mode reading compensation** (line-height and tracking).
+- **Polish:**
+  - The recommendation reason no longer says "lowest" twice.
+  - Shortlist tags are sentence case.
+  - "Copy it" became "Copy to clipboard".
+  - The toast action color is now a token.
+  - The README calls the verification marker a badge.
+
+- **The theme follows the system.** Previously every first visit saved the
+  OS scheme, so a visitor who never touched the toggle stayed on whatever
+  their OS had that day. Now only a choice made with the toggle is stored,
+  under a new key (`token-econ.theme-choice`). The page follows
+  `prefers-color-scheme` live until then. The old key, `token-econ.theme`,
+  couldn't tell a choice from a default, so it is ignored: every existing
+  visitor goes back to following their system once.
+
+Verification: 104 tests passing, lint, build and bundle guard clean. The CLI
+detector reports only the overused-font flag, which is pending a font choice.
+Checked in the browser at 390, 1024 and 1440px in both themes.
+
+## 2026-09-25 — D32: Hanken Grotesk replaces Instrument Sans
+
+The impeccable detector flagged Instrument Sans as an overused face, and it
+was shared with APIFit, which would give two portfolio pieces the same voice.
+The owner chose Hanken Grotesk after seeing the real app rendered in it, next
+to Public Sans and Schibsted Grotesk, in both themes.
+
+Public Sans was the widest of the three. Schibsted Grotesk's tabular figures
+space out commas and decimal points in running text.
+
+Hanken Grotesk is compact and slightly warm, and its figures are tabular by
+default, so money columns align without special handling. It is
+self-hosted through Fontsource, which keeps it same-origin under the CSP.
+The Latin file is 35 KB, against 89 KB for Instrument Sans. The Instrument
+Sans file and its preload were removed. The README screenshot and social
+image were re-captured.
+
+Verification: the detector reports zero findings. Lint, 104 tests, build and
+bundle guard are clean.

@@ -24,12 +24,12 @@ the complete product and does not require an account or API key.
 Suppose you're scoping a customer support chatbot for 80,000 conversations a
 month. Pick the support-bot template, paste the draft system prompt, and set the
 expected turns, retrieved context, output length, cache rate, and retries. The
-receipt updates with a monthly range for each model and names the cheapest
+estimate updates with a monthly range for each model and names the cheapest
 usable starting point.
 
-The recommendation starts with an **UNVERIFIED** stamp. If the price looks good,
-run five representative questions through one or two models in Quality Lab.
-The stamp changes only when a candidate passes the check you chose.
+The recommendation starts out marked **Unverified**. If the price looks good,
+run a few representative questions through the recommended model with the
+quality check. The badge changes only when a model passes the check you chose.
 
 ## Good fits
 

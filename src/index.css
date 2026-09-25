@@ -1,94 +1,135 @@
-/* Token Economist — editorial system (v5).
-   Light-first, warm paper + ink, one restrained brick-red accent used only
-   where cost needs emphasis. Sans for all text; mono for numbers only.
-   Dark mode is a first-class toggle, not the default. */
+/* Token Economist — Ink & cobalt (DESIGN.md v6).
+   A neutral canvas with a trace of the accent's hue (never cream), blue-black
+   ink, and one cobalt accent for actions and the recommended pick. Green,
+   amber and red mean state and nothing else. Hanken Grotesk carries every
+   role, numbers included (tabular figures); mono is only for pasted text. */
 
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/hanken-grotesk";
 @import "@fontsource-variable/geist-mono";
 
 :root {
   color-scheme: light;
 
-  /* warm paper + ink */
-  --bg: #f6f4ef;
-  --bg-raised: #fffefb;
-  --bg-sunken: #edeae1;
-  --rule: #e3dfd4;
-  --rule-strong: #ccc6b6;
+  /* surfaces */
+  --canvas: #f8f9fb;
+  --surface: #ffffff;
+  --sunken: #f0f2f6;
+  --line: #e1e4eb;
+  --line-strong: #c5cad6;
+  --control-border: #8c93a3;
 
-  --text: #201d18;
-  --text-soft: #575049;
-  --text-faint: #6f695c;
+  /* ink ramp — every step clears 4.5:1 on surface and canvas */
+  --ink: #171a21;
+  --ink-soft: #454b5a;
+  --ink-faint: #5f6677;
 
-  /* the one accent: ink brick-red (cost) */
-  --accent: #a5352b;
-  --accent-deep: #8a2a22;
-  --accent-tint: #f3e6e2;
+  /* the one accent */
+  --accent: #2748c9;
+  --accent-hover: #1f3ba8;
+  --accent-soft: #eaeefc;
+  --accent-line: #b9c6f3;
+  --on-accent: #ffffff;
+  --focus: #2748c9;
 
-  /* semantic state only — never decoration */
-  --green: #3c7a54;
-  --green-tint: #e6efe9;
-  --amber: #8a6a1f;
-  --amber-tint: #f3ecd9;
+  /* state only */
+  --good: #1d7a45;
+  --good-soft: #e6f4ec;
+  --good-line: #b5dcc4;
+  --warn: #8a5a00;
+  --warn-soft: #fbf2de;
+  --warn-line: #ecd7a4;
+  --bad: #b42318;
+  --bad-soft: #fdecea;
+  --bad-line: #f1c0ba;
 
-  /* legacy aliases so older component CSS keeps resolving */
-  --paper: var(--bg);
-  --paper-raised: var(--bg-raised);
-  --paper-sunken: var(--bg-sunken);
-  --ink: var(--text);
-  --ink-soft: var(--text-soft);
-  --ink-faint: var(--text-faint);
-  --red: var(--accent);
-  --red-deep: var(--accent-deep);
-  --red-tint: var(--accent-tint);
+  /* money-split series: validated categorical slots 1–5 (dataviz default,
+     adjacent CVD ΔE ≥ 9.1 light / 8.4 dark). Order follows the entity. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
 
-  --display: "Geist Variable", "Geist", -apple-system, "Segoe UI", sans-serif;
-  --sans: var(--display);
-  --serif: var(--display);
-  --mono: "Geist Mono Variable", "Geist Mono", "SF Mono", Menlo, monospace;
+  --toast-surface: #1f232b;
+  --toast-ink: #ffffff;
+  --toast-action: #a9bbff;
+  --shadow-color: 222 20% 30%;
+  --shadow: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 2px 6px -2px hsl(var(--shadow-color) / 0.08);
 
+  --sans: "Hanken Grotesk Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: "Geist Mono Variable", "SF Mono", Menlo, monospace;
+
+  /* type scale — fixed rem, ~1.2 ratio; nothing below 12px */
+  --fs-xs: 0.75rem; /* 12 */
+  --fs-sm: 0.8125rem; /* 13 */
+  --fs-base: 0.9375rem; /* 15 */
+  --fs-md: 1.0625rem; /* 17 */
+  --fs-lg: 1.25rem; /* 20 */
+  --fs-xl: 1.625rem; /* 26 */
+  --fs-2xl: 2.5rem; /* 40 */
+  --fs-figure: 4rem; /* 64 */
+
+  --radius-sm: 6px;
   --radius: 8px;
-  --radius-sm: 5px;
-  --shadow: 0 1px 2px rgba(58, 48, 33, 0.05), 0 4px 14px rgba(58, 48, 33, 0.05);
-  --shadow-raised: 0 2px 6px rgba(58, 48, 33, 0.07), 0 18px 44px rgba(58, 48, 33, 0.08);
+  --radius-lg: 14px;
 
-  /* motion — state change only */
-  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  /* z-index scale */
+  --z-sticky: 20;
+  --z-peek: 30;
+  --z-toast: 40;
+  --z-tooltip: 50;
+  --z-skip: 60;
+
+  /* motion: state change only */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --t-press: 140ms;
-  --t-hover: 180ms;
-  --t-reveal: 240ms;
+  --t-hover: 150ms;
+  --t-reveal: 200ms;
   --t-reprice: 320ms;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* Near-black field, brown as the secondary layer. The page itself is
-     black; warmth arrives through raised surfaces, rules and tints, so the
-     brown reads as structure and accent rather than as the background. Not
-     pure #000 — a hair of lift keeps edges and shadows legible. */
-  --bg: #0a0a0b;
-  --bg-raised: #16120c;
-  --bg-sunken: #050505;
-  --rule: #2c2419;
-  --rule-strong: #55432c;
+  --canvas: #0c0e12;
+  --surface: #171a20;
+  --sunken: #101217;
+  --line: #2a2f38;
+  --line-strong: #3d4450;
+  --control-border: #6f7788;
 
-  --text: #f0ece4;
-  --text-soft: #b5ac9c;
-  --text-faint: #8d8578;
+  --ink: #e8eaf0;
+  --ink-soft: #b3b9c6;
+  --ink-faint: #9098a8;
 
-  --accent: #e0705f;
-  --accent-deep: #c85748;
-  --accent-tint: #24120f;
+  --accent: #8fa6ff;
+  --accent-hover: #a9bbff;
+  --accent-soft: #1b2340;
+  --accent-line: #34437a;
+  --on-accent: #0f1733;
+  --focus: #8fa6ff;
 
-  --green: #5cb07f;
-  --green-tint: #0f1c14;
-  --amber: #d6b064;
-  --amber-tint: #1e1809;
+  --good: #6fcf97;
+  --good-soft: #13261b;
+  --good-line: #285a3c;
+  --warn: #e3c07a;
+  --warn-soft: #2a2314;
+  --warn-line: #5c4a24;
+  --bad: #f19a90;
+  --bad-soft: #34201e;
+  --bad-line: #6b3a34;
 
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.5);
-  --shadow-raised: 0 2px 6px rgba(0, 0, 0, 0.65), 0 18px 44px rgba(0, 0, 0, 0.6);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+
+  --toast-surface: #2b313b;
+  --toast-ink: #e8eaf0;
+  --toast-action: #b8c7ff;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 2px 6px -2px rgb(0 0 0 / 0.5);
 }
 
 * {
@@ -103,79 +144,128 @@ body {
 
 html {
   scroll-behavior: smooth;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
+  scroll-padding-top: 88px;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--canvas);
+  color: var(--ink);
   font-family: var(--sans);
-  font-size: 14px;
+  font-size: var(--fs-base);
   line-height: 1.55;
+  font-synthesis: none;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
   transition: background-color var(--t-reveal) ease, color var(--t-reveal) ease;
 }
 
-/* Sans carries every text role; mono is for numbers only. */
 h1,
 h2,
-h3 {
-  font-family: var(--sans);
-  font-weight: 600;
-  letter-spacing: -0.012em;
+h3,
+h4,
+p {
   margin: 0;
 }
 
-code,
+h1,
+h2,
+h3 {
+  font-weight: 560;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* Light text on a dark field reads thinner and tighter than the same text
+   on white; open it up slightly so both themes read the same. */
+:root[data-theme="dark"] body {
+  line-height: 1.62;
+  letter-spacing: 0.008em;
+}
+
+/* Numbers use the text face with tabular figures, so columns of money align
+   without a second typeface. */
 .num {
-  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--mono);
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 3px;
 }
 
 button {
   font: inherit;
+  color: inherit;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition:
-    transform var(--t-press) var(--ease-out-strong),
+    transform var(--t-press) var(--ease-out),
     background-color var(--t-hover) ease,
     border-color var(--t-hover) ease,
-    box-shadow var(--t-hover) ease,
     color var(--t-hover) ease;
 }
 
 button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 input,
 textarea,
 select {
   font: inherit;
-  color: var(--text);
+  color: var(--ink);
 }
 
 ::placeholder {
-  color: var(--text-faint);
+  color: var(--ink-faint);
   opacity: 1;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *,
   *::before,
   *::after {
-    animation: none !important;
-    transition: none !important;
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root,
+  :root[data-theme="dark"] {
+    --line: var(--ink-faint);
+    --line-strong: var(--ink-soft);
+    --control-border: var(--ink);
   }
 }

@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "./App.css";
 import { MODELS } from "./core/models";
 import {
@@ -7,11 +7,11 @@ import {
   rememberPrices,
   PRICE_SOURCE_NAME,
 } from "./core/livePrices";
-import { countBaseTokens, humanSize } from "./core/tokenizer";
+import { countBaseTokens, wordsFromTokens } from "./core/tokenizer";
 import { INPUT_SIZES, OUTPUT_SIZES } from "./core/sizes";
 import { estimateAll } from "./core/estimate";
 import { lintPrompt } from "./core/lint";
-import { recommend, renderCard } from "./core/card";
+import { fmtBand, fmtUSD, recommend, renderCard } from "./core/card";
 import { runFingerprint } from "./core/measure";
 import {
   DEFAULT_ASSUMPTIONS,
@@ -24,27 +24,55 @@ import { ModelTable } from "./components/ModelTable";
 import { QualityLab } from "./components/QualityLab";
 import { SizeField } from "./components/SizeField";
 import { Receipt } from "./components/Receipt";
+import { VerifyBadge } from "./components/Badge";
 import { PRESETS, type FeaturePreset } from "./core/presets";
 import { decodeShareState, encodeShareState } from "./core/share";
 
 /** State restored from a shared permalink, if the URL carries one. */
 const RESTORED = typeof window !== "undefined" ? decodeShareState(window.location.hash) : null;
 
-type Theme = "light" | "dark";
-const THEME_KEY = "token-econ.theme";
+/** What a first visit opens on: a worked example, labelled as one, so the
+ *  answer is on screen before anyone has to type (DECISIONS.md D30). */
+const FIRST_EXAMPLE = PRESETS.find((p) => p.id === "support-bot") ?? PRESETS[0];
 
-function initialTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  const saved = localStorage.getItem(THEME_KEY);
-  if (saved === "light" || saved === "dark") return saved;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+const REPO_URL = "https://github.com/nethren/token-economist";
+const PORTFOLIO_URL = "https://nethren.com/";
+
+type Theme = "light" | "dark";
+/** Holds only a theme the visitor picked with the toggle. Until then the page
+ *  follows the system, live. (The old key, "token-econ.theme", was written on
+ *  every first visit, so it cannot tell a choice from a default; D31.) */
+const THEME_KEY = "token-econ.theme-choice";
+
+function savedTheme(): Theme | null {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    return saved === "light" || saved === "dark" ? saved : null;
+  } catch {
+    return null;
+  }
 }
 
+function initialTheme(): Theme {
+  if (typeof document !== "undefined") {
+    // public/theme.js has already resolved storage and the OS preference.
+    const set = document.documentElement.getAttribute("data-theme");
+    if (set === "light" || set === "dark") return set;
+  }
+  return "light";
+}
+
+type LabSeed = FeaturePreset["check"] | null;
+type Snapshot = {
+  featureName: string;
+  prompt: string;
+  assumptions: ScaleAssumptions;
+  labSeed: LabSeed;
+};
+
 /** A small hover/focus target that reveals a plain-language explanation.
- *  Renders its own styled popover (instead of the slow, unstyleable native
- *  title tooltip) so it appears instantly, and stays keyboard reachable
- *  (tabIndex + focus) for non-mouse users. The copy is split into a short
- *  definition (`what`) and an optional one-line practical hint (`tip`). */
+ *  Renders its own popover (the native title tooltip is slow and unstyleable)
+ *  and stays keyboard reachable. `what` defines; `tip` gives a practical hint. */
 function InfoDot({ what, tip }: { what: string; tip?: string }) {
   return (
     <span className="info" tabIndex={0} role="note" aria-label={tip ? `${what} ${tip}` : what}>
@@ -62,9 +90,8 @@ function InfoDot({ what, tip }: { what: string; tip?: string }) {
 function perDayHint(perMonth: number): string {
   if (perMonth <= 0) return "";
   const perDay = perMonth / 30;
-  if (perDay < 1) return `≈ ${Math.round(perMonth / 4.3)} a week`;
-  if (perDay < 100) return `≈ ${Math.round(perDay)} a day`;
-  return `≈ ${Math.round(perDay).toLocaleString("en-US")} a day`;
+  if (perDay < 1) return `about ${Math.round(perMonth / 4.3)} a week`;
+  return `about ${Math.round(perDay).toLocaleString("en-US")} a day`;
 }
 
 function NumField({
@@ -94,40 +121,56 @@ function NumField({
       </span>
       <input
         type="number"
+        inputMode="numeric"
         min={min}
         step={step}
         value={value ?? ""}
         placeholder="—"
         onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
       />
-      {hint && <div className="hint">{hint}</div>}
+      {hint && <span className="hint">{hint}</span>}
     </label>
   );
 }
 
-function SecHead({ n, title, lamp }: { n: number; title: string; lamp?: "ok" | "todo" }) {
+/** Numbered because the steps are a real sequence: the decision is made in
+ *  this order. */
+function StepHead({ n, title, id, aside }: { n: number; title: string; id: string; aside?: ReactNode }) {
   return (
-    <div className="sec-head">
-      <span className="sec-num" aria-hidden="true">
+    <div className="step-head">
+      <span className="step-n" aria-hidden="true">
         {n}
       </span>
-      <h2>{title}</h2>
-      {lamp && <span className={`sec-lamp ${lamp}`} aria-hidden="true" />}
+      <h2 id={id}>{title}</h2>
+      {aside && <div className="step-aside">{aside}</div>}
     </div>
+  );
+}
+
+function Mark() {
+  return (
+    <svg className="mark" viewBox="0 0 28 28" aria-hidden="true">
+      <rect x="1" y="1" width="26" height="26" rx="7" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.3" />
+      <path d="M7 10.75 q3.5 -2.5 7 0 t7 0" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" opacity="0.45" />
+      <path d="M7 17.25 q3.5 -2.5 7 0 t7 0" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
   );
 }
 
 function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
   const dark = theme === "dark";
+  const label = dark ? "Switch to light mode" : "Switch to dark mode";
   return (
-    <button
-      className="theme-toggle"
-      onClick={onToggle}
-      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-      title={dark ? "Switch to light mode" : "Switch to dark mode"}
-    >
+    <button className="icon-btn" onClick={onToggle} aria-label={label} title={label}>
       {dark ? (
-        <svg key="moon" className="tt-icon" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
+        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+          <circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <g stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M15.7 4.3l-1.4 1.4M5.7 14.3l-1.4 1.4" />
+          </g>
+        </svg>
+      ) : (
+        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
           <path
             d="M16 11.5A6.5 6.5 0 0 1 8.5 4a6.5 6.5 0 1 0 7.5 7.5Z"
             fill="none"
@@ -136,35 +179,43 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
             strokeLinejoin="round"
           />
         </svg>
-      ) : (
-        <svg key="sun" className="tt-icon" viewBox="0 0 20 20" width="16" height="16" aria-hidden="true">
-          <circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.5" />
-          <g stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-            <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M15.7 4.3l-1.4 1.4M5.7 14.3l-1.4 1.4" />
-          </g>
-        </svg>
       )}
-      <span>{dark ? "Light" : "Dark"}</span>
     </button>
   );
 }
 
+function ExternalIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true">
+      <path d="M4.5 2.5h5v5M9.5 2.5 3 9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function App() {
-  const [featureName, setFeatureName] = useState(RESTORED?.featureName ?? "");
+  const [featureName, setFeatureName] = useState(RESTORED?.featureName ?? FIRST_EXAMPLE.featureName);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [formSeq, setFormSeq] = useState(0);
-  const [prompt, setPrompt] = useState(RESTORED?.prompt ?? "");
+  const [prompt, setPrompt] = useState(RESTORED?.prompt ?? FIRST_EXAMPLE.prompt);
   const [assumptions, setAssumptions] = useState<ScaleAssumptions>(
-    RESTORED?.assumptions ?? DEFAULT_ASSUMPTIONS,
+    RESTORED?.assumptions ?? FIRST_EXAMPLE.assumptions,
   );
   const [runs, setRuns] = useState<MeasureRun[]>([]);
+  // The quality check's starting inputs follow the loaded example; a shared
+  // link or a blank start begins with none.
+  const [labSeed, setLabSeed] = useState<LabSeed>(RESTORED ? null : FIRST_EXAMPLE.check);
   // Lives here rather than inside the Lab because it is part of the
   // configuration a quality result is valid for.
   const [labMaxTokens, setLabMaxTokens] = useState(300);
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
   const [models, setModels] = useState(MODELS);
   const [theme, setTheme] = useState<Theme>(initialTheme);
+  const [toast, setToast] = useState<{ id: number; text: string; undo?: Snapshot } | null>(null);
+  const [verdictEl, setVerdictEl] = useState<HTMLDivElement | null>(null);
+  const [verdictInView, setVerdictInView] = useState(true);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const [priceStatus, setPriceStatus] = useState<
     | { kind: "loading" }
     | { kind: "snapshot"; note?: string }
@@ -174,12 +225,28 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    try {
-      localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      /* private mode: toggle still works for the session */
-    }
   }, [theme]);
+
+  // Follow the system (e.g. an evening switch to dark) until the visitor
+  // makes a choice of their own with the toggle.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const follow = () => {
+      if (savedTheme() === null) setTheme(mq.matches ? "dark" : "light");
+    };
+    mq.addEventListener("change", follow);
+    return () => mq.removeEventListener("change", follow);
+  }, []);
+
+  const toggleTheme = () => {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      /* private mode: the toggle still works for this session */
+    }
+    setTheme(next);
+  };
 
   // Keep prices current without user action: on load, apply the cached live
   // prices (≤6h old) or fetch fresh ones; offline falls back to the last
@@ -205,6 +272,26 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  // The answer follows the reader: once the verdict scrolls out of view, a
+  // compact copy appears in the header (desktop) or a bottom bar (phone).
+  useEffect(() => {
+    if (!verdictEl) {
+      setVerdictInView(true);
+      return;
+    }
+    const io = new IntersectionObserver(([entry]) => setVerdictInView(entry.isIntersecting), {
+      rootMargin: "-64px 0px 0px 0px",
+    });
+    io.observe(verdictEl);
+    return () => io.disconnect();
+  }, [verdictEl]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 8000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const deferredPrompt = useDeferredValue(prompt);
   const hasPrompt = deferredPrompt.trim().length > 0;
@@ -264,32 +351,70 @@ export default function App() {
     ],
   );
 
+  const activeExample = PRESETS.find((p) => p.prompt === prompt) ?? null;
+
+  const snapshot = (): Snapshot => ({ featureName, prompt, assumptions, labSeed });
+
+  const restore = (s: Snapshot) => {
+    setFeatureName(s.featureName);
+    setPrompt(s.prompt);
+    setAssumptions(s.assumptions);
+    setLabSeed(s.labSeed);
+    setFormSeq((n) => n + 1);
+    setToast(null);
+  };
+
+  const offerUndo = (text: string, before: Snapshot) =>
+    setToast({ id: Date.now(), text, undo: before });
+
   const applyFix = (f: LintFinding) => {
-    if (f.apply) setPrompt(f.apply(prompt));
+    if (!f.apply) return;
+    const before = snapshot();
+    setPrompt(f.apply(prompt));
+    offerUndo(`Applied “${f.title}” to your prompt.`, before);
   };
 
   const applyAction = (action: LintAction) => {
     // Both of these live in the advanced panel. Changing a control the user
     // cannot see would look like the number moved on its own, so open it.
     setAdvancedOpen(true);
+    const before = snapshot();
     switch (action.kind) {
       case "enable-caching":
         set("useCaching", true);
+        offerUndo("Turned on prompt caching.", before);
         break;
       case "set-output-cap":
         set("maxOutputTokens", action.tokens);
+        offerUndo(`Capped replies at ${action.tokens} tokens.`, before);
         break;
     }
   };
 
   const applyPreset = (p: FeaturePreset) => {
+    // Switching between examples loses nothing; replacing the user's own
+    // prompt does, so that one is offered back.
+    const ownWork = prompt.trim() !== "" && !PRESETS.some((x) => x.prompt === prompt);
+    const before = snapshot();
     setFeatureName(p.featureName);
     setPrompt(p.prompt);
     setAssumptions(p.assumptions);
+    setLabSeed(p.check);
     // Remounts the size fields, so a template's values show as the named size
-    // they are rather than staying in whichever entry mode was open, and any
-    // half-typed sample is cleared with them.
+    // they are rather than staying in whichever entry mode was open.
     setFormSeq((n) => n + 1);
+    if (ownWork) offerUndo(`Loaded the ${p.name.toLowerCase()} example in place of your prompt.`, before);
+  };
+
+  const startBlank = () => {
+    const before = snapshot();
+    setFeatureName("");
+    setPrompt("");
+    setAssumptions(DEFAULT_ASSUMPTIONS);
+    setLabSeed(null);
+    setFormSeq((n) => n + 1);
+    offerUndo("Cleared the example.", before);
+    promptRef.current?.focus();
   };
 
   /** Manual force-refresh (skips the cache). Downloads a public price
@@ -317,9 +442,14 @@ export default function App() {
   };
 
   const copyCard = async () => {
-    await navigator.clipboard.writeText(card);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    setCopyError("");
+    try {
+      await navigator.clipboard.writeText(card);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopyError('Copy was blocked. Open “The Markdown card” below to select and copy the text.');
+    }
   };
 
   /** Put the whole decision in the URL fragment (never sent to any server)
@@ -332,381 +462,463 @@ export default function App() {
       referenceId: referenceModel.id,
     });
     history.replaceState(null, "", `#${hash}`);
-    await navigator.clipboard.writeText(`${location.origin}${location.pathname}#${hash}`);
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 1800);
+    setCopyError("");
+    try {
+      await navigator.clipboard.writeText(`${location.origin}${location.pathname}#${hash}`);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      setCopyError('Copy was blocked. The share link is now in your address bar; copy it from there. It includes your prompt.');
+    }
   };
 
   const verified = recommendation?.verified ?? false;
+  const qStatus = recommendation?.status ?? null;
+  const showPeek = hasPrompt && recommendation !== null && !verdictInView;
+
+  const exampleButtons = (
+    <div className="examples" role="group" aria-label="Examples">
+      {PRESETS.map((p) => (
+        <button
+          key={p.id}
+          className="chip"
+          aria-pressed={activeExample?.id === p.id}
+          title={p.blurb}
+          onClick={() => applyPreset(p)}
+        >
+          {p.name}
+        </button>
+      ))}
+    </div>
+  );
+
+  const priceNote = (
+    <p className="price-note">
+      {priceStatus.kind === "loading" && "Checking today's prices…"}
+      {priceStatus.kind === "snapshot" &&
+        `Using the bundled price snapshot${priceStatus.note ? ` (${priceStatus.note})` : ""}.`}
+      {priceStatus.kind === "live" && (
+        <>
+          Prices from {PRICE_SOURCE_NAME}, checked {priceStatus.fetchedAt}
+          {priceStatus.via === "cache" ? " (cached)" : ""}.
+          {priceStatus.missing.length > 0 &&
+            ` Snapshot prices for ${priceStatus.missing.join(", ")}.`}
+        </>
+      )}
+      {priceStatus.kind === "error" &&
+        `Price refresh failed (${priceStatus.message}). Using the last known prices.`}{" "}
+      <button
+        className="link-btn"
+        onClick={updatePrices}
+        disabled={priceStatus.kind === "loading"}
+        title={`Downloads today's public price list from ${PRICE_SOURCE_NAME}. Your prompt is never sent. This is the only network call the app makes.`}
+      >
+        Refresh prices
+      </button>
+    </p>
+  );
 
   return (
-    <div className="app">
+    <div className="app" id="top">
+      <a className="skip-link" href="#result">
+        Skip to the estimate
+      </a>
+
       <header className="appbar">
-        <div className="brand">
-          <svg className="mark" viewBox="0 0 28 28" aria-hidden="true">
-            <rect x="1" y="1" width="26" height="26" rx="7" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.35" />
-            <path d="M7 10.75 q3.5 -2.5 7 0 t7 0" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" opacity="0.45" />
-            <path d="M7 17.25 q3.5 -2.5 7 0 t7 0" fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinecap="round" />
-          </svg>
-          <div className="brand-text">
-            <h1>Token Economist</h1>
-            <span className="tagline">know the cost before you build it</span>
+        <a className="wordmark" href="#top" aria-label="Token Economist, back to top">
+          <Mark />
+          <span className="wordmark-text">
+            <span>Token</span>
+            <b>Economist</b>
+          </span>
+        </a>
+
+        {recommendation && (
+          <div className="peek" data-show={showPeek} inert={!showPeek}>
+            <span className="peek-model">{recommendation.estimate.model.displayName}</span>
+            <span className="peek-cost num">
+              {fmtUSD(recommendation.estimate.costPerMonth.point)}
+              <small>/mo</small>
+            </span>
+            <span className="peek-range num">
+              likely {fmtBand(recommendation.estimate.costPerMonth.low, recommendation.estimate.costPerMonth.high)}
+            </span>
+            <VerifyBadge verified={verified} compact />
+            <a className="peek-go" href="#result">
+              See estimate
+            </a>
           </div>
-        </div>
-        <ThemeToggle theme={theme} onToggle={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
+        )}
+
+        <nav className="appnav" aria-label="Site">
+          <a href="#how">How it works</a>
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+            GitHub <ExternalIcon />
+          </a>
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+        </nav>
       </header>
 
-      <div className="layout">
-        {/* --------------------------------------------------- controls */}
-        <aside className="controls">
-          <section className="ctrl-sec">
-            <SecHead n={1} title="The prompt" />
-            <div className="presetbar" role="group" aria-label="Feature templates">
-              <span className="presetbar-label">
-                Start from a template — fills the prompt and the scale
-              </span>
-              <div className="preset-chips">
-                {PRESETS.map((p) => (
-                  <button key={p.id} className="chip" title={p.blurb} onClick={() => applyPreset(p)}>
-                    {p.name}
-                  </button>
-                ))}
+      <main>
+        <section className="intro" aria-labelledby="intro-title">
+          <h1 id="intro-title">What will this AI feature cost to run?</h1>
+          <p className="intro-lede">
+            Paste the prompt you plan to ship and a rough idea of usage. You get a monthly cost
+            range on seven models, what drives it, and what to cut, before anyone writes code. Your
+            prompt never leaves this page.
+          </p>
+          {activeExample && !RESTORED && (
+            <p className="example-note">
+              You're looking at the <strong>{activeExample.name.toLowerCase()}</strong> example.{" "}
+              {activeExample.draftNote ? `${activeExample.draftNote} ` : ""}Change anything, or{" "}
+              <button className="link-btn" onClick={startBlank}>
+                start with a blank prompt
+              </button>
+              .
+            </p>
+          )}
+        </section>
+
+        <div className="workspace">
+          <section className="inputs" aria-label="Inputs">
+            <div className="step" aria-labelledby="step-prompt">
+              <StepHead n={1} id="step-prompt" title="Your prompt" />
+              <div className="field">
+                <span>Start from an example</span>
+                {exampleButtons}
               </div>
-            </div>
-            <label className="field">
-              <span>Feature name</span>
-              <input
-                type="text"
-                value={featureName}
-                onChange={(e) => setFeatureName(e.target.value)}
-                placeholder="e.g. Support ticket classifier"
-              />
-            </label>
-            <label className="field">
-              <span>Prompt as it will ship</span>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                spellCheck={false}
-                placeholder="Paste the system prompt, instructions, and any examples you plan to ship…"
-              />
-            </label>
-            <div className="tokmeter">
-              <span title="Counted offline with the o200k tokenizer. Other providers' counts are estimated with calibration bands, which is why costs are ranges.">
-                <strong className="num">{baseTokens.toLocaleString("en-US")}</strong> tokens{" "}
-                {humanSize(baseTokens)}
-              </span>
-              <span>measured offline · never uploaded</span>
-            </div>
-          </section>
-
-          <section className="ctrl-sec">
-            <SecHead n={2} title="Scale" />
-            <div className="assume-grid">
-              <NumField
-                label="Conversations / month"
-                value={assumptions.requestsPerMonth}
-                onChange={(n) => set("requestsPerMonth", n ?? 0)}
-                step={1000}
-                hint={perDayHint(assumptions.requestsPerMonth)}
-                what="Separate requests your feature handles each month."
-                tip="People who'll use it × how often each. A rough order of magnitude is enough."
-              />
-              <NumField
-                label="Turns / conversation"
-                value={assumptions.turnsPerConversation}
-                onChange={(n) => set("turnsPerConversation", Math.max(1, n ?? 1))}
-                min={1}
-                hint={
-                  assumptions.turnsPerConversation === 1
-                    ? "one-shot: ask once, answer once"
-                    : "each turn re-sends the earlier ones"
-                }
-                what="Back-and-forth exchanges in one conversation."
-                tip="A one-shot task is 1; a short chat, 3–5."
-              />
-              <SizeField
-                key={`in-${formSeq}`}
-                label="What users send each turn"
-                value={assumptions.avgUserInputTokens}
-                onChange={(n) => set("avgUserInputTokens", n ?? 0)}
-                options={INPUT_SIZES}
-                sampleLabel="Paste a typical user message and we'll count it exactly…"
-                what="The text going in each turn: the user's message, plus anything you attach."
-                tip="Pick the closest size, or paste a real one to measure it."
-              />
-              <SizeField
-                key={`out-${formSeq}`}
-                label="How long each reply is"
-                value={assumptions.expectedOutputTokens}
-                onChange={(n) => set("expectedOutputTokens", n)}
-                options={OUTPUT_SIZES}
-                unknownLabel="Not sure yet"
-                sampleLabel="Paste a reply you'd be happy with and we'll count it exactly…"
-                what="How much the model writes back each turn."
-                tip="This drives cost more than anything else. Measure one if you can."
-              />
+              <label className="field">
+                <span>Feature name</span>
+                <input
+                  type="text"
+                  value={featureName}
+                  onChange={(e) => setFeatureName(e.target.value)}
+                  placeholder="e.g. Support ticket classifier"
+                />
+              </label>
+              <label className="field">
+                <span>The prompt as it will ship</span>
+                <textarea
+                  ref={promptRef}
+                  className="prompt-box"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  spellCheck={false}
+                  placeholder="Paste the system prompt, instructions and any examples you plan to ship…"
+                />
+              </label>
+              <p className="tokmeter">
+                <span title="Counted in your browser with the o200k tokenizer. Other providers are estimated with calibration bands, which is why costs are ranges.">
+                  <strong className="num">{baseTokens.toLocaleString("en-US")}</strong> tokens, about{" "}
+                  {wordsFromTokens(baseTokens).toLocaleString("en-US")} words
+                </span>
+                <span>Counted on this device, never uploaded</span>
+              </p>
             </div>
 
-            {/* Everything below changes the number less than the four above, and
-                most features leave it at the default. It stays one click away
-                rather than in the way — and opens itself when a suggestion
-                changes something inside it. */}
-            <details
-              className="more advanced"
-              open={advancedOpen}
-              onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
-            >
-              <summary>Retries, tools, thinking, caching, batch</summary>
+            <div className="step" aria-labelledby="step-usage">
+              <StepHead n={2} id="step-usage" title="Usage" />
               <div className="assume-grid">
                 <NumField
-                  label="Reply limit (max_tokens)"
-                  value={assumptions.maxOutputTokens}
-                  onChange={(n) => set("maxOutputTokens", n)}
-                  hint="blank = uncapped (flagged)"
-                  what="A hard ceiling on any single reply's length."
-                  tip="Caps your worst case. Leave blank if none is set; we'll flag it."
+                  label="Conversations a month"
+                  value={assumptions.requestsPerMonth}
+                  onChange={(n) => set("requestsPerMonth", n ?? 0)}
+                  step={1000}
+                  hint={perDayHint(assumptions.requestsPerMonth)}
+                  what="Separate conversations or requests your feature handles each month."
+                  tip="People who'll use it × how often each. A rough order of magnitude is enough."
                 />
                 <NumField
-                  label="Retry rate %"
-                  value={Math.round(assumptions.retryRate * 100)}
-                  onChange={(n) => set("retryRate", (n ?? 0) / 100)}
-                  what="Requests you send again after a failure or bad answer."
-                  tip="Each retry bills again. 3% is a safe default."
+                  label="Turns per conversation"
+                  value={assumptions.turnsPerConversation}
+                  onChange={(n) => set("turnsPerConversation", Math.max(1, n ?? 1))}
+                  min={1}
+                  hint={
+                    assumptions.turnsPerConversation === 1
+                      ? "one question, one answer"
+                      : "each turn re-sends the earlier ones"
+                  }
+                  what="Back-and-forth exchanges in one conversation."
+                  tip="A one-shot task is 1; a short chat, 3–5."
                 />
-                <NumField
-                  label="Tool calls / turn"
-                  value={assumptions.toolCallsPerTurn}
-                  onChange={(n) => set("toolCallsPerTurn", n ?? 0)}
-                  what="Tools the model uses per turn: search, lookups, functions."
-                  tip="Each result adds text to read. Use 0 for no tools."
+                <SizeField
+                  key={`in-${formSeq}`}
+                  label="What users send each turn"
+                  value={assumptions.avgUserInputTokens}
+                  onChange={(n) => set("avgUserInputTokens", n ?? 0)}
+                  options={INPUT_SIZES}
+                  sampleLabel="Paste a typical user message and it's counted exactly…"
+                  what="The text going in each turn: the user's message, plus anything you attach."
+                  tip="Pick the closest size, or paste a real one to measure it."
                 />
-                <NumField
-                  label="Tokens / tool call"
-                  value={assumptions.tokensPerToolCall}
-                  onChange={(n) => set("tokensPerToolCall", n ?? 0)}
-                  step={100}
-                  what="Text each tool result adds back to the conversation."
-                  tip="A lookup is small; a whole document is large. For RAG, model retrieved context here."
+                <SizeField
+                  key={`out-${formSeq}`}
+                  label="How long each reply is"
+                  value={assumptions.expectedOutputTokens}
+                  onChange={(n) => set("expectedOutputTokens", n)}
+                  options={OUTPUT_SIZES}
+                  unknownLabel="Not sure yet"
+                  sampleLabel="Paste a reply you'd be happy with and it's counted exactly…"
+                  what="How much the model writes back each turn."
+                  tip="This drives cost more than anything else. Measure one if you can."
                 />
-                <NumField
-                  label="Thinking tokens / turn"
-                  value={assumptions.reasoningTokensPerTurn}
-                  onChange={(n) => set("reasoningTokensPerTurn", Math.max(0, n ?? 0))}
-                  step={500}
-                  what="Hidden tokens a thinking model spends before it answers. Billed as output, never shown."
-                  tip="0 for non-thinking models. Agentic workloads often burn 1–5k per turn."
-                />
-                <label className="checkline switch wide">
-                  <input
-                    type="checkbox"
-                    checked={assumptions.useCaching}
-                    onChange={(e) => set("useCaching", e.target.checked)}
-                  />
-                  <span className="switch-track" aria-hidden="true" />
-                  Prompt caching on the static prefix
-                  <InfoDot
-                    what="Reuse a fixed prompt prefix at a steep discount instead of re-sending it."
-                    tip="Turn on when your instructions stay the same across requests."
-                  />
-                </label>
-                {assumptions.useCaching && (
-                  <NumField
-                    label="Cache hit rate %"
-                    value={Math.round(assumptions.cacheHitRate * 100)}
-                    onChange={(n) => set("cacheHitRate", Math.min(100, Math.max(0, n ?? 0)) / 100)}
-                    what="Eligible requests that actually reuse the cache."
-                    tip="Steady traffic keeps it warm; sporadic traffic lets it expire."
-                  />
-                )}
-                <label className="checkline switch wide">
-                  <input
-                    type="checkbox"
-                    checked={assumptions.useBatch}
-                    onChange={(e) => set("useBatch", e.target.checked)}
-                  />
-                  <span className="switch-track" aria-hidden="true" />
-                  Batch API (non-interactive, −50%)
-                  <InfoDot
-                    what="Submit work in bulk, get results within hours, for half price."
-                    tip="Good for overnight jobs. Not for live chat."
-                  />
-                </label>
               </div>
-            </details>
 
-            {recommendation && recommendation.estimate.assumptionNotes.length > 0 && (
-              <ul className="notes-list">
-                {recommendation.estimate.assumptionNotes.map((n, i) => (
-                  <li key={i}>{n}</li>
-                ))}
-              </ul>
-            )}
+              {/* Everything below moves the number less than the four above, and
+                  most features leave it at the default. It stays one click away
+                  and opens itself when a suggestion changes something inside. */}
+              <details
+                className="disclosure"
+                open={advancedOpen}
+                onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+              >
+                <summary>Retries, tools, thinking, caching and batch</summary>
+                <div className="assume-grid">
+                  <NumField
+                    label="Reply limit (max_tokens)"
+                    value={assumptions.maxOutputTokens}
+                    onChange={(n) => set("maxOutputTokens", n)}
+                    hint="blank means no limit, which is flagged"
+                    what="A hard ceiling on any single reply's length."
+                    tip="Caps your worst case. Leave blank if none is set; it will be flagged."
+                  />
+                  <NumField
+                    label="Retry rate %"
+                    value={Math.round(assumptions.retryRate * 100)}
+                    onChange={(n) => set("retryRate", (n ?? 0) / 100)}
+                    what="Requests you send again after a failure or bad answer."
+                    tip="Each retry bills again. 3% is a safe default."
+                  />
+                  <NumField
+                    label="Tool calls per turn"
+                    value={assumptions.toolCallsPerTurn}
+                    onChange={(n) => set("toolCallsPerTurn", n ?? 0)}
+                    what="Tools the model uses per turn: search, lookups, functions."
+                    tip="Each result adds text to read. Use 0 for no tools."
+                  />
+                  <NumField
+                    label="Tokens per tool call"
+                    value={assumptions.tokensPerToolCall}
+                    onChange={(n) => set("tokensPerToolCall", n ?? 0)}
+                    step={100}
+                    what="Text each tool result adds back to the conversation."
+                    tip="A lookup is small; a whole document is large. For RAG, model retrieved passages here."
+                  />
+                  <NumField
+                    label="Thinking tokens per turn"
+                    value={assumptions.reasoningTokensPerTurn}
+                    onChange={(n) => set("reasoningTokensPerTurn", Math.max(0, n ?? 0))}
+                    step={500}
+                    what="Hidden tokens a thinking model spends before it answers. Billed as output, never shown."
+                    tip="0 for non-thinking models. Agent workloads often use 1–5k per turn."
+                  />
+                  <label className="switch wide">
+                    <input
+                      type="checkbox"
+                      checked={assumptions.useCaching}
+                      onChange={(e) => set("useCaching", e.target.checked)}
+                    />
+                    <span className="switch-track" aria-hidden="true" />
+                    <span>Prompt caching on the fixed part of the prompt</span>
+                    <InfoDot
+                      what="Reuse a fixed prompt prefix at a steep discount instead of re-sending it."
+                      tip="Turn on when your instructions stay the same across requests."
+                    />
+                  </label>
+                  {assumptions.useCaching && (
+                    <NumField
+                      label="Cache hit rate %"
+                      value={Math.round(assumptions.cacheHitRate * 100)}
+                      onChange={(n) => set("cacheHitRate", Math.min(100, Math.max(0, n ?? 0)) / 100)}
+                      what="Eligible requests that actually reuse the cache."
+                      tip="Steady traffic keeps it warm; sporadic traffic lets it expire."
+                    />
+                  )}
+                  <label className="switch wide">
+                    <input
+                      type="checkbox"
+                      checked={assumptions.useBatch}
+                      onChange={(e) => set("useBatch", e.target.checked)}
+                    />
+                    <span className="switch-track" aria-hidden="true" />
+                    <span>Batch API: results within hours, half price</span>
+                    <InfoDot
+                      what="Submit work in bulk, get results within hours, for half price."
+                      tip="Good for overnight jobs. Not for live chat."
+                    />
+                  </label>
+                </div>
+              </details>
+
+              {recommendation && recommendation.estimate.assumptionNotes.length > 0 && (
+                <ul className="notes-list">
+                  {recommendation.estimate.assumptionNotes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
 
-          <section className="ctrl-sec" id="quality">
-            <SecHead n={3} title="Quality check" lamp={verified ? "ok" : "todo"} />
-            <div className={`labstatus ${verified ? "ok" : "todo"}`}>
-              {(() => {
-                const st = recommendation?.status ?? null;
-                if (verified && st)
-                  return (
-                    <>
-                      {st.passed}/{st.total} passed the {st.checkName} check. The stamp covers that
-                      check only.
-                    </>
-                  );
-                if (st?.state === "stale")
-                  return (
-                    <>
-                      Stale: that result came from a different prompt or reply cap. Re-run the check
-                      to earn the stamp back.
-                    </>
-                  );
-                if (st?.state === "failed")
-                  return (
-                    <>
-                      Failed: {st.passed}/{st.total} passed the {st.checkName} check. The pick stays
-                      unverified.
-                    </>
-                  );
-                if (st && (st.state === "incomplete" || st.state === "unreviewed"))
-                  return (
-                    <>
-                      {st.reviewed} of {st.total} samples reviewed — judge the remaining{" "}
-                      {st.unreviewed} before this counts.
-                    </>
-                  );
-                return (
-                  <>
-                    Optional. You can compute cost, but you have to watch quality: the pick stays{" "}
-                    <em>unverified</em> until a model passes your own check. Run it in the AI tool
-                    you already pay for — this app never calls one.
-                  </>
-                );
-              })()}
-            </div>
+          <section className="result" id="result" aria-label="Estimate" tabIndex={-1}>
+            <Receipt
+              hasPrompt={hasPrompt}
+              recommendation={recommendation}
+              estimates={estimates}
+              findings={findings}
+              requestsPerMonth={assumptions.requestsPerMonth}
+              featureName={featureName}
+              onApply={applyFix}
+              onAction={applyAction}
+              verdictRef={setVerdictEl}
+              emptyActions={exampleButtons}
+              priceNote={priceNote}
+            >
+              <div className="share-row">
+                <button className="btn primary" onClick={copyCard}>
+                  {copied ? "Copied" : "Copy as Markdown"}
+                </button>
+                <button
+                  className="btn"
+                  onClick={copyShareLink}
+                  title="Puts the prompt and assumptions in the link's #fragment. Whoever opens it sees them; no server does."
+                >
+                  {linkCopied ? "Link copied" : "Copy share link"}
+                </button>
+                <span className="share-note">
+                  For the PRD or ticket. The link includes your prompt.
+                </span>
+              </div>
+              {copyError && (
+                <p className="notice bad" role="alert">
+                  {copyError}
+                </p>
+              )}
+            </Receipt>
+          </section>
+        </div>
+
+        {hasPrompt && (
+          <section className="quality" id="quality" aria-labelledby="quality-title" tabIndex={-1}>
+            <StepHead
+              n={3}
+              id="quality-title"
+              title="Check quality before you commit"
+              aside={recommendation ? <VerifyBadge verified={verified} /> : null}
+            />
+            <p className="quality-status" aria-live="polite">
+              {verified && qStatus && (
+                <>
+                  {qStatus.passed} of {qStatus.total} passed your {qStatus.checkName} check, so the
+                  recommendation is marked quality-checked. That covers this check only.
+                </>
+              )}
+              {!verified && qStatus?.state === "stale" &&
+                "Your last result came from a different prompt or reply cap. Run the check again to count it."}
+              {!verified && qStatus?.state === "failed" &&
+                `${qStatus.passed} of ${qStatus.total} passed your ${qStatus.checkName} check. The recommendation stays unverified; try the step-up model.`}
+              {!verified &&
+                qStatus &&
+                (qStatus.state === "incomplete" || qStatus.state === "unreviewed") &&
+                `${qStatus.reviewed} of ${qStatus.total} replies judged. Judge the other ${qStatus.unreviewed} before this counts.`}
+              {!qStatus &&
+                "Cost can be calculated; quality has to be observed. The cheapest model stays unverified until it passes a check you define, run in the AI tool you already use. This app never calls a model."}
+            </p>
             <QualityLab
+              key={`lab-${formSeq}`}
+              seed={labSeed}
               featureName={featureName}
               prompt={deferredPrompt}
               runs={runs}
               setRuns={setRuns}
               maxTokens={labMaxTokens}
               setMaxTokens={setLabMaxTokens}
+              recommendedModelId={recommendation?.estimate.model.id ?? null}
             />
           </section>
+        )}
 
-          <div className="pricebar">
-            {priceStatus.kind === "loading" && (
-              <span className="pricebar-note">checking today's prices…</span>
-            )}
-            {priceStatus.kind === "snapshot" && (
-              <span className="pricebar-note">
-                {priceStatus.note !== undefined ? `${priceStatus.note}, ` : ""}using bundled price
-                snapshot
-              </span>
-            )}
-            {priceStatus.kind === "live" && (
-              <span className="pricebar-note live">
-                prices auto-updated · {PRICE_SOURCE_NAME} · {priceStatus.fetchedAt}
-                {priceStatus.via === "cache" ? " (cached)" : ""}
-                {priceStatus.missing.length > 0 &&
-                  ` · kept snapshot: ${priceStatus.missing.join(", ")}`}
-              </span>
-            )}
-            {priceStatus.kind === "error" && (
-              <span className="pricebar-note error">
-                price refresh failed ({priceStatus.message}). Keeping the last prices.
-              </span>
-            )}
-            <button
-              className="chip"
-              onClick={updatePrices}
-              disabled={priceStatus.kind === "loading"}
-              title={`Downloads today's prices from ${PRICE_SOURCE_NAME} (a public price list). Your prompt is never sent. This is the only network call the app makes.`}
-            >
-              refresh
-            </button>
-          </div>
-        </aside>
-
-        {/* --------------------------------------------------- results */}
-        <main className="results">
-          <Receipt
-            hasPrompt={hasPrompt}
-            recommendation={recommendation}
-            estimates={estimates}
-            findings={findings}
-            runs={runs}
-            requestsPerMonth={assumptions.requestsPerMonth}
-            onApply={applyFix}
-            onAction={applyAction}
-          />
-
-          {hasPrompt && (
-            <>
-              <div className="results-actions">
-                <button className="btn primary" onClick={copyCard}>
-                  Copy as Markdown
-                </button>
-                {copied && <span className="copied">copied ✓</span>}
-                <button
-                  className="btn"
-                  onClick={copyShareLink}
-                  title="Encodes the prompt + assumptions in the URL fragment — shared with the link's recipient, never sent to a server."
-                >
-                  Copy share link
-                </button>
-                {linkCopied && <span className="copied">link copied ✓</span>}
-              </div>
-
-              <details className="more">
-                <summary>Full comparison table: ranges, $/1M, per conversation</summary>
+        {hasPrompt && (
+          <section className="details" aria-label="Full detail">
+            <details className="disclosure">
+              <summary>Full comparison: ranges, price per million tokens, cost per conversation</summary>
+              <div className="table-scroll">
                 <ModelTable estimates={estimates} recommendation={recommendation} tableOnly />
-              </details>
-
-              <details className="more">
-                <summary>Raw Markdown card (what "Copy as Markdown" copies)</summary>
-                <pre className="cardpre">{card}</pre>
-              </details>
-            </>
-          )}
-
-          <footer className="foot">
-            <details className="more">
-              <summary>How this works</summary>
-              <div className="how-body">
-                <p>
-                  Models charge by the token. A token is a chunk of text about three quarters of a
-                  word long, so a short instruction like “classify this support ticket” costs about
-                  five.
-                </p>
-                <p>
-                  Your browser counts the tokens in your prompt and multiplies them by the price
-                  each provider publishes. That includes everything one request carries: your
-                  instructions, the user’s message, earlier turns you resend, any retrieved text,
-                  and the reply that comes back. Multiply by how often the feature runs and you have
-                  the monthly bill.
-                </p>
-                <p>
-                  You never send your prompt to a model to get this estimate, so the same prompt and
-                  the same assumptions give you the same number every time.
-                </p>
-                <p>
-                  You see a range because two things stay unknown until you ship: how long each
-                  reply runs, and how providers other than OpenAI split text into tokens. Set a
-                  reply limit and the range narrows.
-                </p>
               </div>
             </details>
-            <div className="trust">
-              <span>Ranges, not quotes</span>
-              <span>Cost path never calls a model</span>
-              <span>Prompt stays in your tab</span>
+            <details className="disclosure">
+              <summary>The Markdown card (what “Copy as Markdown” copies)</summary>
+              <pre className="cardpre">{card}</pre>
+            </details>
+          </section>
+        )}
+
+        <section className="how" id="how" aria-labelledby="how-title" tabIndex={-1}>
+          <div className="how-side">
+            <h2 id="how-title">How it works</h2>
+            <p>
+              A portfolio project by{" "}
+              <a href={PORTFOLIO_URL} target="_blank" rel="noopener noreferrer">
+                Nethren
+              </a>
+              . Open source under MIT.
+            </p>
+            <p className="how-links">
+              <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+                View the code on GitHub <ExternalIcon />
+              </a>
+              <a href={PORTFOLIO_URL} target="_blank" rel="noopener noreferrer">
+                Back to my portfolio <ExternalIcon />
+              </a>
+            </p>
+          </div>
+          <div className="how-body">
+            <div>
+              <h3>Why I built it</h3>
+              <p>A price per million tokens doesn’t tell a PM what a feature will cost. I built Token Economist to make that decision possible while writing the spec, with the assumptions visible.</p>
             </div>
-          </footer>
-        </main>
-      </div>
+            <div>
+              <h3>Try the workflow</h3>
+              <p>Pick a template, adjust usage and reply length, then compare monthly ranges across seven models. Review suggested prompt savings and copy the cost card into a PRD or ticket.</p>
+            </div>
+            <div>
+              <h3>The product decision</h3>
+              <p>Cost can be calculated; quality needs evidence. The cheapest option stays unverified until you check it. Export up to five samples, run them in your own AI tool and paste the replies back for local scoring. Editing the prompt makes earlier evidence stale.</p>
+            </div>
+            <div>
+              <h3>Under the hood</h3>
+              <p>Built with React, TypeScript and Vite. An offline tokenizer and deterministic cost model account for conversation history, retries, caching and tools. Vitest checks the calculations and evidence rules. Provider differences and unknown reply lengths appear as ranges.</p>
+              <p>Prompts stay in your browser. Only the public price list is fetched; a dated snapshot works offline. Quality results are self-reported, and share links contain the prompt only when you choose to create one.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="foot">
+        <span>Token Economist. Ranges, not quotes: the same inputs always give the same numbers.</span>
+        <span>
+          Built by{" "}
+          <a href={PORTFOLIO_URL} target="_blank" rel="noopener noreferrer">
+            Nethren
+          </a>
+        </span>
+      </footer>
+
+      {toast && (
+        <div className="toast" role="status" key={toast.id}>
+          <span>{toast.text}</span>
+          {toast.undo && (
+            <button className="toast-action" onClick={() => restore(toast.undo!)}>
+              Undo
+            </button>
+          )}
+          <button className="toast-close" aria-label="Dismiss" onClick={() => setToast(null)}>
+            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+              <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

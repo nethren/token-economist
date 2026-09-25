@@ -86,7 +86,7 @@ export function SizeField({
         </span>
       </span>
 
-      <select value={selectValue} onChange={(e) => pick(e.target.value)}>
+      <select aria-label={label} value={selectValue} onChange={(e) => pick(e.target.value)}>
         {options.map((o) => (
           <option key={o.id} value={o.id}>
             {o.label}
@@ -100,6 +100,7 @@ export function SizeField({
       {mode === "measure" && (
         <textarea
           className="sizefield-sample"
+          aria-label={`${label}: example text`}
           value={sample}
           onChange={(e) => onSample(e.target.value)}
           placeholder={sampleLabel}
@@ -110,6 +111,7 @@ export function SizeField({
       {mode === "custom" && (
         <input
           className="sizefield-num"
+          aria-label={`${label}: token count`}
           type="number"
           min={0}
           step={10}

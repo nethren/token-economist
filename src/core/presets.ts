@@ -18,6 +18,16 @@ export interface FeaturePreset {
   featureName: string;
   prompt: string;
   assumptions: ScaleAssumptions;
+  /** A starting point for the quality check, so the check can be exported in
+   *  one click from the example: realistic inputs and a sensible pass rule. */
+  check: {
+    samples: string[];
+    kind: "contains" | "regex" | "json" | "manual";
+    value?: string;
+  };
+  /** Shown beside the example notice when the example deliberately carries
+   *  the mistakes the linter exists to catch. */
+  draftNote?: string;
 }
 
 export const CLASSIFIER_PROMPT = `You are a customer support ticket classifier.
@@ -29,14 +39,17 @@ Example
 Input: "I was charged twice for my subscription this month."
 Output: {"category": "billing", "confidence": "high"}`;
 
-const SUPPORT_BOT_PROMPT = `You are the support assistant for Acme, a project-management SaaS.
+const SUPPORT_BOT_PROMPT = `You are the support assistant for Plotline, a project-management app.
 
 Answer the user's question about their account, billing, or how to use the product.
 Rules:
 - Be concise: 2-4 sentences unless the user asks for steps.
 - If the question involves refunds over $100, account deletion, or legal topics, hand off: reply exactly "Let me connect you with a human agent." and stop.
-- Never invent product features. If unsure, say you are unsure and link the docs at https://docs.acme.example.
-- Ask at most one clarifying question before attempting an answer.`;
+- Never invent product features. If unsure, say you are unsure and link the docs at https://docs.plotline.example.
+- Ask at most one clarifying question before attempting an answer.
+
+Important, do not forget:
+- If the question involves refunds over $100, account deletion, or legal topics, hand off: reply exactly "Let me connect you with a human agent." and stop.`;
 
 const RAG_ASSISTANT_PROMPT = `You are a documentation assistant. Answer strictly from the retrieved passages below; if the answer is not in them, say "I don't have that in the docs" and suggest the closest covered topic.
 
@@ -80,6 +93,15 @@ export const PRESETS: FeaturePreset[] = [
       expectedOutputTokens: 30,
       maxOutputTokens: 100,
     },
+    check: {
+      kind: "json",
+      samples: [
+        "I was charged twice this month and want one of them refunded.",
+        "The export to CSV button does nothing when I click it.",
+        "How do I add a teammate to my workspace?",
+        "Someone is sending phishing emails that pretend to be from you.",
+      ],
+    },
   },
   {
     id: "support-bot",
@@ -93,9 +115,19 @@ export const PRESETS: FeaturePreset[] = [
       avgUserInputTokens: 80,
       turnsPerConversation: 4,
       expectedOutputTokens: 130,
-      maxOutputTokens: 400,
+      maxOutputTokens: null,
       useCaching: true,
     },
+    check: {
+      kind: "manual",
+      samples: [
+        "How do I change the email address invoices go to?",
+        "Can I get a refund for last month? It was $240.",
+        "Is there a Gantt chart view?",
+        "How do I archive a project we finished?",
+      ],
+    },
+    draftNote: "It's a first draft with two common cost mistakes for the tool to catch.",
   },
   {
     id: "rag-assistant",
@@ -113,6 +145,15 @@ export const PRESETS: FeaturePreset[] = [
       toolCallsPerTurn: 1,
       tokensPerToolCall: 1500,
       useCaching: true,
+    },
+    check: {
+      kind: "regex",
+      value: "\\[[^\\]]+\\]|I don't have that in the docs",
+      samples: [
+        "How do I download an invoice as a PDF?",
+        "What is the API rate limit on the Team plan?",
+        "Can I use single sign-on on the Starter plan?",
+      ],
     },
   },
   {
@@ -133,6 +174,14 @@ export const PRESETS: FeaturePreset[] = [
       reasoningTokensPerTurn: 2_000,
       retryRate: 0.05,
     },
+    check: {
+      kind: "manual",
+      samples: [
+        "Merge the two Acme Logistics accounts created last week.",
+        "Fix contacts whose country is written as 'U.S.' instead of 'United States'.",
+        "Find leads with no owner and assign them to the round-robin queue.",
+      ],
+    },
   },
   {
     id: "summarizer",
@@ -148,6 +197,14 @@ export const PRESETS: FeaturePreset[] = [
       expectedOutputTokens: 300,
       maxOutputTokens: 400,
       useBatch: true,
+    },
+    check: {
+      kind: "contains",
+      value: "TL;DR",
+      samples: [
+        "Q3 board memo: revenue grew 12% to $4.1M, churn held at 2.3%, and hiring pauses until January while the sales team is restructured.",
+        "Incident review: a bad config push took checkout down for 47 minutes on 3 September; rollback fixed it and a staged rollout is now required.",
+      ],
     },
   },
 ];
