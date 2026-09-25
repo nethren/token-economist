@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import type { LintAction, LintFinding, MeasureRun, ModelEstimate } from "../core/types";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import type { Band, LintAction, LintFinding, ModelEstimate } from "../core/types";
 import type { Recommendation } from "../core/card";
 import { BREAKDOWN_LABELS, fmtBand, fmtUSD } from "../core/card";
+import { VerifyBadge } from "./Badge";
 
 function usePrefersReducedMotion() {
   const [reduce, setReduce] = useState(
@@ -20,8 +21,7 @@ function usePrefersReducedMotion() {
 
 /** Roll a number toward its target over `duration` ms (ease-out cubic), like a
  *  meter recomputing. Jumps instantly under reduced motion. First mount shows
- *  the value directly; only later changes animate — the panel's entrance owns
- *  the first appearance. */
+ *  the value directly; only later changes animate. */
 function useCountUp(target: number, duration = 260) {
   const reduce = usePrefersReducedMotion();
   const [display, setDisplay] = useState(target);
@@ -61,22 +61,45 @@ function useCountUp(target: number, duration = 260) {
 
 function AnimatedUSD({ value }: { value: number }) {
   const shown = useCountUp(value);
-  return <span className="dc-total-fig num">{fmtUSD(shown)}</span>;
+  return <span className="dc-figure num">{fmtUSD(shown)}</span>;
+}
+
+/** The estimate drawn as what it is: a likely range with a most-likely point,
+ *  on a scale that starts at zero so the width of the uncertainty is honest.
+ *  Transforms only, so re-pricing never triggers layout. */
+function RangeBand({ band }: { band: Band }) {
+  const max = band.high * 1.2;
+  if (!(max > 0)) return null;
+  const at = (n: number) => Math.min(1, Math.max(0, n / max));
+  return (
+    <div className="rband" aria-hidden="true">
+      <div className="rband-track">
+        <div
+          className="rband-range"
+          style={{ transform: `translateX(${at(band.low) * 100}%) scaleX(${Math.max(0.005, at(band.high) - at(band.low))})` }}
+        />
+        <div className="rband-point" style={{ transform: `translateX(${at(band.point) * 100}%)` }}>
+          <span />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
- * The decision panel: the whole outcome — recommendation, cost drivers,
- * model comparison, top savings, quality state — as clean typographic
- * hierarchy. It re-prices live as the controls change. (Formerly a
- * skeuomorphic "receipt"; kept the filename, dropped the gimmickry.)
+ * The decision panel: recommendation, likely range, what drives the cost,
+ * every model side by side, and what to cut. Re-prices live as inputs change.
+ * (The filename predates the redesign; it has not been a receipt since v5.)
  */
 
+/** Series slot per driver, fixed by entity (never by rank), so a colour
+ *  always means the same thing and neighbours in the bar never change. */
 const SEG_CLASS: Record<string, string> = {
-  prefix: "seg-prefix",
-  userAndHistory: "seg-history",
-  tools: "seg-tools",
-  output: "seg-output",
-  reasoning: "seg-reasoning",
+  prefix: "seg-1",
+  userAndHistory: "seg-2",
+  tools: "seg-3",
+  reasoning: "seg-4",
+  output: "seg-5",
 };
 
 function actionLabel(action: LintAction): string {
@@ -84,7 +107,7 @@ function actionLabel(action: LintAction): string {
     case "enable-caching":
       return "Turn on caching";
     case "set-output-cap":
-      return `Cap replies at ${action.tokens}`;
+      return `Cap replies at ${action.tokens} tokens`;
   }
 }
 
@@ -94,32 +117,42 @@ export function Receipt({
   estimates,
   findings,
   requestsPerMonth,
+  featureName,
   onApply,
   onAction,
+  verdictRef,
+  emptyActions,
+  priceNote,
+  children,
 }: {
   hasPrompt: boolean;
   recommendation: Recommendation | null;
   estimates: ModelEstimate[];
   findings: LintFinding[];
-  runs: MeasureRun[];
   requestsPerMonth: number;
+  featureName: string;
   onApply: (f: LintFinding) => void;
   onAction: (a: LintAction) => void;
+  /** Watched by the app so the header can show the answer once it scrolls away. */
+  verdictRef?: Ref<HTMLDivElement>;
+  /** Example buttons offered when there is no prompt yet. */
+  emptyActions?: ReactNode;
+  /** Price source and freshness, shown with the model comparison it applies to. */
+  priceNote?: ReactNode;
+  /** Actions rendered at the foot of the panel (copy, share). */
+  children?: ReactNode;
 }) {
+  const [showAllFixes, setShowAllFixes] = useState(false);
+
   if (!hasPrompt) {
     return (
       <div className="decision decision--empty" id="receipt">
-        <div className="dc-empty">
-          <span className="dc-empty-mark" aria-hidden="true">
-            $
-          </span>
-          <h2>Paste a prompt to see the cost</h2>
-          <p>
-            Add the prompt you plan to ship, or start from a template. You'll get the monthly cost on
-            every model, where that money goes, and the cheapest option that still does the job. No
-            code required.
-          </p>
-        </div>
+        <h2>Paste a prompt to see what it costs</h2>
+        <p>
+          Put the prompt you plan to ship in step 1. You'll get a monthly range on seven models,
+          what drives it, and the cheapest one worth testing.
+        </p>
+        {emptyActions && <div className="dc-empty-actions">{emptyActions}</div>}
       </div>
     );
   }
@@ -127,9 +160,10 @@ export function Receipt({
   if (!recommendation) {
     return (
       <div className="decision" id="receipt">
+        <h2 className="dc-block-title">No model fits these numbers</h2>
         <p className="dc-reason">
-          No model fits these numbers: the conversation runs past every context window. Trim turns,
-          history, or tool payloads on the left.
+          The conversation runs past every model's context window. Lower the turns, the message
+          size or the tool payloads in step 2.
         </p>
       </div>
     );
@@ -138,59 +172,103 @@ export function Receipt({
   const rec = recommendation.estimate;
   const b = rec.breakdown;
   const splitTotal = BREAKDOWN_LABELS.reduce((s, seg) => s + b[seg.key], 0);
-  const splitRows = BREAKDOWN_LABELS.map((s) => ({
+  const segments = BREAKDOWN_LABELS.map((s) => ({
     ...s,
     share: splitTotal > 0 ? b[s.key] / splitTotal : 0,
-  }))
-    .filter((s) => s.share > 0)
-    .sort((x, y) => y.share - x.share);
+  })).filter((s) => s.share > 0);
+  const legend = [...segments].sort((x, y) => y.share - x.share);
 
   const byCost = [...estimates].sort((a, c) => a.costPerMonth.point - c.costPerMonth.point);
   const maxCost = Math.max(...byCost.map((e) => e.costPerMonth.point));
   const shortlistLabel = (id: string) =>
     recommendation.shortlist.find((s) => s.estimate.model.id === id)?.label;
 
-  const topFindings = findings.slice(0, 3);
-  const moreFindings = findings.length - topFindings.length;
+  const shownFindings = showAllFixes ? findings : findings.slice(0, 3);
+  const moreFindings = findings.length - Math.min(findings.length, 3);
+  const st = recommendation.status;
 
   return (
-    <div className="decision" id="receipt" role="region" aria-label="The cost decision">
-      {/* headline */}
-      <div className="dc-verdict">
-        <div className="dc-verdict-label">
-          Recommended
-          <a
-            key={recommendation.verified ? "verified" : "unverified"}
-            className={`stamp ${recommendation.verified ? "verified" : "unverified"}`}
-            href="#quality"
-            title={
-              recommendation.verified
-                ? "Passed your own check. See step 3 on the left."
-                : "Cost is computed. Quality isn't measured yet: run the check in step 3 to earn this."
-            }
-          >
-            {recommendation.verified ? "quality-checked" : "unverified"}
-          </a>
+    <div className="decision" id="receipt" role="region" aria-label="Cost estimate">
+      <div className="dc-verdict" ref={verdictRef}>
+        <div className="dc-verdict-head">
+          <span className="dc-kicker">
+            Recommended{featureName.trim() ? ` for ${featureName.trim()}` : ""}
+          </span>
+          <VerifyBadge verified={recommendation.verified} />
         </div>
-        <div className="dc-model">{rec.model.displayName}</div>
+        <h2 className="dc-model">{rec.model.displayName}</h2>
         <div className="dc-total">
           <AnimatedUSD value={rec.costPerMonth.point} />
-          <span className="dc-total-unit">/mo</span>
+          <span className="dc-total-unit">a month</span>
         </div>
-        <div className="dc-under num">
-          {fmtBand(rec.costPerMonth.low, rec.costPerMonth.high)} range ·{" "}
-          {requestsPerMonth.toLocaleString("en-US")} conversations/mo ·{" "}
-          {fmtUSD(rec.costPerConversation.point)} each
-        </div>
+        <RangeBand band={rec.costPerMonth} />
+        <p className="dc-under">
+          Likely between{" "}
+          <strong className="num">{fmtUSD(rec.costPerMonth.low)}</strong> and{" "}
+          <strong className="num">{fmtUSD(rec.costPerMonth.high)}</strong>. That's{" "}
+          <span className="num">{requestsPerMonth.toLocaleString("en-US")}</span> conversations at
+          about <span className="num">{fmtUSD(rec.costPerConversation.point)}</span> each.
+        </p>
         <p className="dc-reason">{recommendation.reason}</p>
+        {st && st.state !== "passed" && (
+          <p className="dc-quality">
+            {st.state === "stale" &&
+              "Your quality result was measured on a different prompt or reply cap, so it no longer applies. "}
+            {st.state === "failed" &&
+              `It failed your check: ${st.passed} of ${st.total} passed. `}
+            {(st.state === "incomplete" || st.state === "unreviewed") &&
+              `${st.unreviewed} of ${st.total} replies still need your judgment. `}
+            <a href="#quality">Go to the quality check</a>
+          </p>
+        )}
+        {!st && (
+          <p className="dc-quality">
+            <a href="#quality">Test it below</a> before this goes in the PRD.
+          </p>
+        )}
+        {st?.state === "passed" && (
+          <p className="dc-quality ok">
+            {st.passed} of {st.total} passed your {st.checkName} check
+            {st.failed > 0 ? `, ${st.failed} failed` : ""}. That covers this check, not accuracy in
+            general.
+          </p>
+        )}
       </div>
 
-      {/* three-up analytics */}
       <div className="dc-grid">
-        <section className="dc-card">
-          <h3>Where the money goes</h3>
+        <section className="dc-block" aria-labelledby="dc-models-title">
+          <h3 className="dc-block-title" id="dc-models-title">
+            Every model, same assumptions
+          </h3>
+          <ul className="dc-models">
+            {byCost.map((e) => {
+              const isRec = e.model.id === rec.model.id;
+              const tag = shortlistLabel(e.model.id);
+              const share = maxCost > 0 ? e.costPerMonth.point / maxCost : 0;
+              return (
+                <li key={e.model.id} className={isRec ? "rec" : ""}>
+                  <span className="dc-model-name">
+                    {e.model.displayName}
+                    {tag && <em className={`tag${tag === "start here" ? " accent" : ""}`}>{tag}</em>}
+                    {e.exceedsContext && <em className="tag bad">too long for this model</em>}
+                  </span>
+                  <span className="dc-model-cost num">{fmtUSD(e.costPerMonth.point)}</span>
+                  <div className="dc-model-bar" aria-hidden="true">
+                    <div style={{ transform: `scaleX(${Math.max(0.01, share)})` }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {priceNote && <div className="dc-note">{priceNote}</div>}
+        </section>
+
+        <section className="dc-block" aria-labelledby="dc-split-title">
+          <h3 className="dc-block-title" id="dc-split-title">
+            Where the money goes
+          </h3>
           <div className="dc-splitbar" aria-hidden="true">
-            {splitRows.map((s) => (
+            {segments.map((s) => (
               <div
                 key={s.key}
                 className={SEG_CLASS[s.key]}
@@ -199,126 +277,78 @@ export function Receipt({
             ))}
           </div>
           <ul className="dc-legend">
-            {splitRows.map((s) => (
+            {legend.map((s) => (
               <li key={s.key} title={s.explain}>
                 <i className={SEG_CLASS[s.key]} aria-hidden="true" />
                 <span className="dc-legend-label">{s.label}</span>
-                <span className="dc-legend-val num">{Math.round(s.share * 100)}%</span>
+                <span className="dc-legend-pct num">{Math.round(s.share * 100)}%</span>
                 <span className="dc-legend-usd num">{fmtUSD(rec.costPerMonth.point * s.share)}</span>
               </li>
             ))}
           </ul>
         </section>
-
-        <section className="dc-card dc-card--wide">
-          <h3>Across models</h3>
-          <ul className="dc-models">
-            {byCost.map((e) => {
-              const isRec = e.model.id === rec.model.id;
-              const tag = shortlistLabel(e.model.id);
-              return (
-                <li key={e.model.id} className={isRec ? "rec" : ""}>
-                  <span className="dc-model-name">
-                    {e.model.displayName}
-                    {tag && <em className="dc-tag">{tag}</em>}
-                    {e.exceedsContext && <em className="dc-tag bad">exceeds context</em>}
-                  </span>
-                  <span className="dc-model-cost num">{fmtUSD(e.costPerMonth.point)}</span>
-                  <div className="dc-model-bar" aria-hidden="true">
-                    <div style={{ width: `${((e.costPerMonth.point / maxCost) * 100).toFixed(2)}%` }} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
       </div>
 
-      {/* savings + quality */}
-      <div className="dc-grid">
-        {topFindings.length > 0 && (
-          <section className="dc-card">
-            <h3>Make it cheaper</h3>
-            <ul className="dc-fixes">
-              {topFindings.map((f) => (
-                <li key={f.rule}>
-                  <div className="dc-fix-row">
-                    <span className="dc-fix-title">{f.title}</span>
-                    {f.monthlySavingUSD && f.monthlySavingUSD.point > 0.005 && (
-                      <span className="dc-fix-save num">
-                        save {fmtBand(Math.max(0, f.monthlySavingUSD.low), f.monthlySavingUSD.high)}
+      <section className="dc-block dc-fixes-block" aria-labelledby="dc-fixes-title">
+        <h3 className="dc-block-title" id="dc-fixes-title">
+          Make it cheaper
+        </h3>
+        {findings.length === 0 ? (
+          <p className="dc-empty-line">Nothing obvious to cut in this prompt at these numbers.</p>
+        ) : (
+          <ul className="dc-fixes">
+            {shownFindings.map((f) => (
+              <li key={f.rule}>
+                <div className="dc-fix-head">
+                  <span className="dc-fix-title">{f.title}</span>
+                  {f.monthlySavingUSD &&
+                    f.monthlySavingUSD.point > 0.005 &&
+                    (f.action?.kind === "set-output-cap" ? (
+                      // A cap bounds the worst case; the estimate's own range
+                      // already sits under it, so this is risk, not a saving.
+                      <span className="dc-fix-risk num">
+                        Caps up to {fmtUSD(f.monthlySavingUSD.high)}/mo of overrun
                       </span>
+                    ) : (
+                      <span className="dc-fix-save num">
+                        Save {fmtBand(Math.max(0, f.monthlySavingUSD.low), f.monthlySavingUSD.high)}
+                        /mo
+                      </span>
+                    ))}
+                </div>
+                <p className="dc-fix-detail">{f.detail}</p>
+                {(f.apply || f.action) && (
+                  <div className="dc-fix-actions">
+                    {f.apply && (
+                      <button className="btn small" onClick={() => onApply(f)}>
+                        Apply to prompt
+                      </button>
+                    )}
+                    {f.action && (
+                      <button className="btn small" onClick={() => onAction(f.action!)}>
+                        {actionLabel(f.action)}
+                      </button>
                     )}
                   </div>
-                  {(f.apply || f.action) && (
-                    <div className="dc-fix-actions">
-                      {f.apply && (
-                        <button className="btn small" onClick={() => onApply(f)}>
-                          Apply to prompt
-                        </button>
-                      )}
-                      {f.action && (
-                        <button className="btn small" onClick={() => onAction(f.action!)}>
-                          {actionLabel(f.action)}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-            {moreFindings > 0 && (
-              <p className="dc-note">+{moreFindings} smaller finding(s) in the full card below</p>
-            )}
-          </section>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
+        {moreFindings > 0 && (
+          <button
+            className="link-btn dc-more"
+            aria-expanded={showAllFixes}
+            onClick={() => setShowAllFixes((v) => !v)}
+          >
+            {showAllFixes
+              ? "Show fewer"
+              : `Show ${moreFindings} smaller ${moreFindings === 1 ? "suggestion" : "suggestions"}`}
+          </button>
+        )}
+      </section>
 
-        <section className="dc-card">
-          <h3>Quality</h3>
-          {(() => {
-            const st = recommendation.status;
-            if (!st || st.state === "not-run")
-              return (
-                <p className="dc-quality">
-                  Cost is computed. Quality isn't. Run step&nbsp;3 on a few samples and the stamp
-                  flips once a model passes your check.
-                </p>
-              );
-            if (st.state === "passed")
-              return (
-                <p className="dc-quality ok">
-                  {st.passed}/{st.total} passed the {st.checkName} check
-                  {st.failed > 0 ? `, ${st.failed} failed` : ""}. That is a {st.checkName} result,
-                  not a general accuracy guarantee.
-                </p>
-              );
-            if (st.state === "stale")
-              return (
-                <p className="dc-quality">
-                  Stale evidence: this result was measured against a different prompt or reply cap,
-                  so it doesn't apply here. Re-run the check in step&nbsp;3.
-                </p>
-              );
-            if (st.state === "failed")
-              return (
-                <p className="dc-quality">
-                  Failed your check: {st.passed}/{st.total} passed the {st.checkName} check. The
-                  pick stays <em>unverified</em>.
-                </p>
-              );
-            return (
-              <p className="dc-quality">
-                Review incomplete — {st.reviewed} of {st.total} samples reviewed, {st.unreviewed}{" "}
-                still unjudged. Not verified.
-              </p>
-            );
-          })()}
-        </section>
-      </div>
-
-      <p className="dc-foot">
-        Same inputs, same numbers, every time. No model was called to produce this.
-      </p>
+      {children && <div className="dc-foot">{children}</div>}
     </div>
   );
 }

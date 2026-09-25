@@ -138,11 +138,11 @@ function findExampleBlocks(prompt: string): ExampleBlock[] {
 type DumpKind = "list" | "json" | "csv" | "qa" | "kv";
 
 const DUMP_LABEL: Record<DumpKind, string> = {
-  list: "list/inventory",
-  json: "JSON blob",
-  csv: "CSV/tabular blob",
-  qa: "Q&A / FAQ dump",
-  kv: "key-value reference dump",
+  list: "list or inventory",
+  json: "block of JSON data",
+  csv: "table of data",
+  qa: "Q&A / FAQ section",
+  kv: "block of key-value reference data",
 };
 
 /** Classify one line as reference-data-shaped, blank, or prose/instruction. */
@@ -280,14 +280,18 @@ export function lintPrompt(
   // 1. Duplicated instructions
   const dup = ruleDuplicateLines(prompt);
   if (dup.saved > 0) {
+    // Quote the instruction, not its list marker.
+    const line = dup.dupes[0].replace(/^\s*[-*•]\s+/, "");
+    // Cut on a word boundary so the quote never ends mid-word.
+    const quoted = line.length > 90 ? `${line.slice(0, 90).replace(/\s+\S*$/, "")}…` : line;
     findings.push({
       rule: "duplicate-instructions",
-      title: "Duplicated instructions",
+      title: "Some instructions appear twice",
       severity: dup.saved > 100 ? "high" : "medium",
       detail:
-        `${dup.dupes.length} line(s) repeat earlier instructions verbatim, e.g. ` +
-        `"${dup.dupes[0].slice(0, 90)}${dup.dupes[0].length > 90 ? "…" : ""}". ` +
-        `Repeating an instruction does not make the model follow it better; it bills every request.`,
+        `${dup.dupes.length === 1 ? "One line repeats" : `${dup.dupes.length} lines repeat`} an earlier instruction word for word, e.g. ` +
+        `"${quoted}". ` +
+        `Saying it twice doesn't make the model follow it better, but every request pays for it.`,
       tokensSaved: dup.saved,
       monthlySavingUSD: scaleBand(perTok, dup.saved),
       apply: dup.apply,
@@ -299,11 +303,11 @@ export function lintPrompt(
   if (fillerSaved >= 10) {
     findings.push({
       rule: "filler-phrases",
-      title: "Verbose boilerplate phrasing",
+      title: "Wordy phrasing you can cut",
       severity: "low",
       detail:
-        `Politeness and filler constructions ("please ensure that", "it is important to note", ` +
-        `"in order to") add ~${fillerSaved} tokens without changing behavior. Instructions can be imperative and terse.`,
+        `Phrases like "please ensure that", "it is important to note" and "in order to" add about ` +
+        `${fillerSaved} tokens to every request without changing what the model does. Short, direct instructions work the same.`,
       tokensSaved: fillerSaved,
       monthlySavingUSD: scaleBand(perTok, fillerSaved),
       apply: applyFiller,
@@ -315,9 +319,9 @@ export function lintPrompt(
   if (ws.saved >= 8) {
     findings.push({
       rule: "whitespace-bloat",
-      title: "Whitespace and separator bloat",
+      title: "Extra blank lines and dividers",
       severity: "low",
-      detail: `Blank-line runs, trailing spaces, and long separator rules cost ~${ws.saved} tokens per request.`,
+      detail: `Runs of blank lines, trailing spaces and long divider lines cost about ${ws.saved} tokens on every request.`,
       tokensSaved: ws.saved,
       monthlySavingUSD: scaleBand(perTok, ws.saved),
       apply: ws.apply,
@@ -335,12 +339,12 @@ export function lintPrompt(
     if (saved > 150) {
       findings.push({
         rule: "oversized-few-shot",
-        title: `${examples.length} few-shot examples — 2 usually suffice`,
+        title: `${examples.length} worked examples where two usually do the job`,
         severity: "medium",
         detail:
-          `Found ${examples.length} example blocks totaling ` +
-          `${examples.reduce((s, b) => s + b.tokens, 0)} tokens. For most tasks, quality plateaus after ` +
-          `1–2 well-chosen examples on current models. Keeping the 2 largest-signal examples saves ~${saved} tokens/request.`,
+          `The prompt includes ${examples.length} examples, ` +
+          `${examples.reduce((s, b) => s + b.tokens, 0)} tokens in total. On current models most tasks stop ` +
+          `improving after one or two good examples. Keeping the two most useful saves about ${saved} tokens on every request.`,
         tokensSaved: saved,
         monthlySavingUSD: scaleBand(perTok, saved),
         apply: applyTrimExamples,
@@ -361,12 +365,13 @@ export function lintPrompt(
     if (engages && saving.point > 1) {
       findings.push({
         rule: "cache-static-prefix",
-        title: "Static prefix should use prompt caching",
+        title: "Reuse the fixed part of the prompt (prompt caching)",
         severity: saving.point > 50 ? "high" : "medium",
         detail:
-          `The pasted prompt (~${without.promptTokens.point} ${reference.provider} tokens) is re-billed at full ` +
-          `price on every request. With prompt caching (${Math.round(a.cacheHitRate * 100)}% hit rate), reads bill at ` +
-          `${reference.cacheReadMult}× input price. Requires the prefix to be byte-stable (no timestamps/user data interpolated).`,
+          `Your prompt (about ${without.promptTokens.point} tokens) is billed at full price on every request. ` +
+          `With prompt caching, repeat reads cost ${reference.cacheReadMult}× the normal input price, assuming ` +
+          `${Math.round(a.cacheHitRate * 100)}% of requests reuse it. It only works if the prompt's text stays identical ` +
+          `between requests, so keep timestamps and user details out of it.`,
         tokensSaved: 0,
         monthlySavingUSD: saving,
         action: { kind: "enable-caching" },
@@ -383,12 +388,12 @@ export function lintPrompt(
       : 300;
     findings.push({
       rule: "missing-output-cap",
-      title: "No response length limit set",
+      title: "No limit on reply length",
       severity: "high",
       detail:
-        `Output length is the least predictable cost driver and nothing bounds it. Set a max_tokens limit just ` +
-        `above the expected response length (≈${suggestedCap} tokens here); this converts up to $${exposure.toFixed(2)}/month of upside ` +
-        `uncertainty into a hard ceiling and protects against runaway generations.`,
+        `Reply length is the hardest cost to predict, and nothing caps it here. A limit (max_tokens) just above ` +
+        `the expected length, about ${suggestedCap} tokens, turns up to $${exposure >= 10 ? Math.round(exposure) : exposure.toFixed(2)}/month of overrun risk into a ` +
+        `hard ceiling and stops one runaway reply from billing thousands of tokens.`,
       tokensSaved: 0,
       monthlySavingUSD: { low: 0, point: exposure * 0.5, high: exposure },
       action: { kind: "set-output-cap", tokens: suggestedCap },
@@ -401,13 +406,13 @@ export function lintPrompt(
     const saved = Math.round(dump.tokens * 0.9);
     findings.push({
       rule: "stuffed-context",
-      title: "Large reference block — retrieve instead of inlining",
+      title: "A large reference block is pasted into the prompt",
       severity: "high",
       detail:
-        `A ~${dump.tokens}-token ${DUMP_LABEL[dump.kind]} is inlined in the prompt and re-billed on every ` +
-        `request, but each request only needs a fraction of it. Retrieving only the relevant entries per request ` +
-        `(assume ~10% relevant) saves ~${saved} tokens/request. The applied fix swaps the block for a ` +
-        `retrieval placeholder; the ~10% relevant share moves to per-request injected context.`,
+        `A ${dump.tokens}-token ${DUMP_LABEL[dump.kind]} sits in the prompt and is billed on every request, ` +
+        `though each request needs only a small part of it. Looking up just the relevant entries each time ` +
+        `(assuming about 10% are needed) saves about ${saved} tokens per request. Applying this swaps the block ` +
+        `for a placeholder where the looked-up entries go.`,
       tokensSaved: saved,
       monthlySavingUSD: scaleBand(perTok, saved),
       apply: applyRetrieval,
@@ -430,12 +435,12 @@ export function lintPrompt(
       if (saving.point > 1) {
         findings.push({
           rule: "cheaper-tier",
-          title: `Task profile fits ${cheapest.model.displayName}`,
+          title: `This task may suit ${cheapest.model.displayName}`,
           severity: "medium",
           detail:
-            `The prompt reads as a bounded classification/extraction-style task with short output — the profile ` +
-            `the cheapest models handle well. Verify it in the Quality Lab (export the check, run a few samples in your own AI tool) before ` +
-            `committing; if ${cheapest.model.displayName} passes your check, this is the single largest saving available.`,
+            `The prompt reads like a short classification or extraction task, the kind the cheapest models usually ` +
+            `handle. Test it with the quality check before committing: if ${cheapest.model.displayName} passes your ` +
+            `check, this is the biggest saving available.`,
           tokensSaved: 0,
           monthlySavingUSD: saving,
         });
@@ -462,11 +467,11 @@ export function lintPrompt(
       const monthly = perConv * a.requestsPerMonth;
       findings.push({
         rule: "unbounded-history",
-        title: "Conversation history grows unbounded",
+        title: "Every turn re-sends the whole conversation",
         severity: "medium",
         detail:
-          `At ${N} turns/conversation, full history resend costs ~${Math.round(excess)} extra input tokens per ` +
-          `conversation vs a ${WINDOW}-turn sliding window (or summarization/compaction of older turns).`,
+          `At ${N} turns per conversation, re-sending the full history costs about ${Math.round(excess)} extra input ` +
+          `tokens per conversation, compared with keeping only the last ${WINDOW} turns or summarizing older ones.`,
         tokensSaved: Math.round(excess / N),
         monthlySavingUSD: { low: monthly * 0.8, point: monthly, high: monthly * 1.2 },
       });

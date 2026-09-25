@@ -291,7 +291,7 @@ export function recommend(
   return {
     estimate: cheapest,
     reason:
-      `Lowest estimated cost to test. Among the models shown, ${cheapest.model.displayName} has the lowest estimated cost under these assumptions. Quality has not been tested.` +
+      `Lowest estimated cost to test: ${cheapest.model.displayName} is the cheapest of the models shown under these assumptions. Quality has not been tested.` +
       stepUpPhrase,
     verified: false,
     status: null,

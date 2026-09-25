@@ -9,6 +9,7 @@ import {
 } from "../core/measure";
 import { parseReplyPack, renderCheckPack } from "../core/pack";
 import { fmtUSD, summarizeRun } from "../core/card";
+import type { FeaturePreset } from "../core/presets";
 
 /**
  * Quality Lab — one document out, one document back.
@@ -26,6 +27,8 @@ export function QualityLab({
   setRuns,
   maxTokens,
   setMaxTokens,
+  recommendedModelId,
+  seed,
 }: {
   featureName: string;
   prompt: string;
@@ -34,11 +37,17 @@ export function QualityLab({
   /** Owned by App: it is part of the configuration a result is valid for. */
   maxTokens: number;
   setMaxTokens: (n: number) => void;
+  /** The model the estimate recommends. Tested by default, since that is the
+   *  pick the badge is about; the user can still choose another. */
+  recommendedModelId: string | null;
+  /** Starting inputs and pass rule from the loaded example. Read once on
+   *  mount; the app remounts the Lab when a different example is loaded. */
+  seed?: FeaturePreset["check"] | null;
 }) {
-  const [modelId, setModelId] = useState("claude-haiku-4-5");
-  const [samplesText, setSamplesText] = useState("");
-  const [checkKind, setCheckKind] = useState<QualityCheck["kind"]>("json");
-  const [checkValue, setCheckValue] = useState("");
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const [samplesText, setSamplesText] = useState(() => seed?.samples.join("\n") ?? "");
+  const [checkKind, setCheckKind] = useState<QualityCheck["kind"]>(seed?.kind ?? "json");
+  const [checkValue, setCheckValue] = useState(seed?.value ?? "");
   const [pasted, setPasted] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
@@ -53,9 +62,11 @@ export function QualityLab({
     [samplesText],
   );
 
+  const modelId = pickedId ?? recommendedModelId ?? MODELS[0].id;
   const model = useMemo(() => MODELS.find((m) => m.id === modelId) ?? MODELS[0], [modelId]);
   const check: QualityCheck = { kind: checkKind, value: checkValue || undefined };
   const fingerprint = runFingerprint(prompt, maxTokens);
+  const hasSamples = samples.length > 0;
 
   const preview = useMemo(
     () => previewRunCost(model, prompt, samples, maxTokens).totalUSD,
@@ -154,119 +165,145 @@ export function QualityLab({
     ]);
   };
 
+  const nameOf = (id: string) => MODELS.find((m) => m.id === id)?.displayName ?? id;
+
   return (
-    <div className="panel lab">
-      <p className="lab-lead">
-        Cost is predictable from tokens. Quality has to be watched. Download the check, run it in
-        the AI tool you already pay for, paste the reply back. Scoring happens here, on your
-        machine.
-      </p>
-      <div className="lab-facts">
-        <span>no API key, ever</span>
-        <span>your tool, your account</span>
-        <span>replies scored locally</span>
-      </div>
+    <div className="lab">
+      <div className="lab-cols">
+        <section className="lab-col" aria-labelledby="lab-describe">
+          <h3 id="lab-describe">Describe the check</h3>
+          <p className="lab-col-note">A few real inputs, and what a good reply looks like.</p>
 
-      <div className="lab-step">1 · Describe the check</div>
-
-      <label className="field">
-        <span>Test inputs — one per line, up to {MAX_SAMPLES_PER_RUN}</span>
-        <textarea
-          style={{ minHeight: 84 }}
-          value={samplesText}
-          onChange={(e) => setSamplesText(e.target.value)}
-          placeholder={"I was charged twice this month\nAPI returns 500 on upload\n…"}
-        />
-      </label>
-
-      <div className="lab-row">
-        <label className="field">
-          <span>Model you will test</span>
-          <select value={modelId} onChange={(e) => setModelId(e.target.value)}>
-            {MODELS.map((m: ModelSpec) => (
-              <option key={m.id} value={m.id}>
-                {m.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field lab-cap">
-          <span>Reply cap</span>
-          <input
-            type="number"
-            min={16}
-            max={1024}
-            value={maxTokens}
-            onChange={(e) => setMaxTokens(Number(e.target.value) || 300)}
-          />
-        </label>
-      </div>
-
-      <div className="lab-row">
-        <label className="field">
-          <span>Counts as a pass when</span>
-          <select
-            value={checkKind}
-            onChange={(e) => setCheckKind(e.target.value as QualityCheck["kind"])}
-          >
-            <option value="json">reply is valid JSON</option>
-            <option value="contains">reply contains…</option>
-            <option value="regex">reply matches regex…</option>
-            <option value="manual">I judge it myself</option>
-          </select>
-        </label>
-        {(checkKind === "contains" || checkKind === "regex") && (
           <label className="field">
-            <span>{checkKind === "contains" ? "Required text" : "Regex pattern"}</span>
-            <input type="text" value={checkValue} onChange={(e) => setCheckValue(e.target.value)} />
-          </label>
-        )}
-      </div>
-
-      <div className="lab-step">2 · Run it in your own AI tool</div>
-
-      <div className="lab-actions">
-        <button className="btn primary" disabled={samples.length === 0} onClick={downloadPack}>
-          Download check
-        </button>
-        <button className="btn" disabled={samples.length === 0} onClick={copyPack}>
-          {copied ? "Copied" : "Copy instead"}
-        </button>
-      </div>
-      <p className="hint">
-        {samples.length === 0
-          ? "Add a test input above to build the check."
-          : `Paste it into Claude, ChatGPT, Cursor — anything. It costs about ${fmtUSD(preview)} on your account. Token Economist charges nothing and calls nothing.`}
-      </p>
-      {error && <div className="lab-error">{error}</div>}
-
-      {samples.length > 0 && (
-        <>
-          <div className="lab-step">3 · Paste the reply back</div>
-          <label className="field">
+            <span>Test inputs, one per line (up to {MAX_SAMPLES_PER_RUN})</span>
             <textarea
-              style={{ minHeight: 120 }}
+              className="lab-samples"
+              value={samplesText}
+              onChange={(e) => setSamplesText(e.target.value)}
+              placeholder={"I was charged twice this month\nThe export button does nothing\n…"}
+            />
+          </label>
+
+          <div className="lab-row">
+            <label className="field">
+              <span>Model to test</span>
+              <select
+                value={modelId}
+                onChange={(e) =>
+                  setPickedId(e.target.value === recommendedModelId ? null : e.target.value)
+                }
+              >
+                {MODELS.map((m: ModelSpec) => (
+                  <option key={m.id} value={m.id}>
+                    {m.displayName}
+                    {m.id === recommendedModelId ? " (recommended)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Reply cap</span>
+              <input
+                type="number"
+                min={16}
+                max={1024}
+                value={maxTokens}
+                onChange={(e) => setMaxTokens(Number(e.target.value) || 300)}
+              />
+            </label>
+          </div>
+
+          <div className="lab-row">
+            <label className="field">
+              <span>Counts as a pass when</span>
+              <select
+                value={checkKind}
+                onChange={(e) => setCheckKind(e.target.value as QualityCheck["kind"])}
+              >
+                <option value="json">the reply is valid JSON</option>
+                <option value="contains">the reply contains…</option>
+                <option value="regex">the reply matches a pattern…</option>
+                <option value="manual">I judge each reply myself</option>
+              </select>
+            </label>
+            {(checkKind === "contains" || checkKind === "regex") && (
+              <label className="field">
+                <span>{checkKind === "contains" ? "Required text" : "Pattern (regex)"}</span>
+                <input
+                  type="text"
+                  value={checkValue}
+                  onChange={(e) => setCheckValue(e.target.value)}
+                />
+              </label>
+            )}
+          </div>
+        </section>
+
+        <section className="lab-col" aria-labelledby="lab-run">
+          <h3 id="lab-run">Run it in your own AI tool</h3>
+          <p className="lab-col-note">
+            The check is one Markdown file: your prompt, the inputs, and the rule. Paste it into
+            Claude, ChatGPT, Cursor or anything you already pay for. It asks for one reply document
+            back.
+          </p>
+          <div className="lab-actions">
+            <button className="btn primary" disabled={!hasSamples} onClick={downloadPack}>
+              Download the check
+            </button>
+            <button className="btn" disabled={!hasSamples} onClick={copyPack}>
+              {copied ? "Copied" : "Copy to clipboard"}
+            </button>
+          </div>
+          <p className="hint" aria-live="polite">
+            {hasSamples
+              ? `About ${fmtUSD(preview)} on your own account. Token Economist calls nothing and charges nothing.`
+              : "Add at least one test input first."}
+          </p>
+          {error && (
+            <p className="notice bad" role="alert">
+              {error}
+            </p>
+          )}
+        </section>
+
+        <section className="lab-col" aria-labelledby="lab-paste">
+          <h3 id="lab-paste">Paste the replies back</h3>
+          <p className="lab-col-note">
+            Paste the whole reply document. It's scored here, in your browser.
+          </p>
+          <label className="field">
+            <span className="sr-only">Reply document</span>
+            <textarea
+              className="lab-paste"
               value={pasted}
+              disabled={!hasSamples}
               onChange={(e) => setPasted(e.target.value)}
-              placeholder={"Paste the whole reply document your AI tool produced…"}
+              placeholder={
+                hasSamples
+                  ? "Paste the reply document your AI tool produced…"
+                  : "Available once the check has a test input"
+              }
             />
           </label>
 
           {pasted.trim().length > 0 && (
-            <div className={`lab-parse ${parsed.found === samples.length && !mismatched ? "ok" : "warn"}`}>
+            <div
+              className={`notice ${parsed.found === samples.length && !mismatched ? "good" : "warn"}`}
+              role="status"
+            >
               <strong>
-                Read {parsed.found} of {samples.length}{" "}
-                {samples.length === 1 ? "reply" : "replies"}
+                Found {parsed.found} of {samples.length}{" "}
+                {samples.length === 1 ? "reply" : "replies"}.
               </strong>
               {mismatched && (
                 <span>
                   {" "}
-                  · this reply was made for a different prompt or reply cap, so it will be marked
-                  stale
+                  These replies were made for a different prompt or reply cap, so they'll be marked
+                  stale.
                 </span>
               )}
               {parsed.warnings.map((w, i) => (
-                <span key={i} className="lab-parse-note">
+                <span key={i} className="notice-line">
                   {w}
                 </span>
               ))}
@@ -274,18 +311,19 @@ export function QualityLab({
           )}
 
           <button className="btn primary" disabled={parsed.found === 0} onClick={score}>
-            Score {parsed.found} {parsed.found === 1 ? "reply" : "replies"}
+            Score {parsed.found > 0 ? `${parsed.found} ` : ""}
+            {parsed.found === 1 ? "reply" : "replies"}
           </button>
           <p className="hint">
-            Missing replies stay unreviewed rather than counting as failures. Token counts are
-            offline estimates; your provider dashboard has the billed truth.
+            A missing reply stays unreviewed; it never counts as a failure. Token counts are
+            offline estimates, and your provider's dashboard has the billed numbers.
           </p>
-        </>
-      )}
+        </section>
+      </div>
 
       {import.meta.env.DEV && (
         <div className="lab-demo">
-          <span className="hint">Demo data (dev only, labelled as demo):</span>
+          <span>Demo data (dev only, labelled as demo):</span>
           {(["passed", "failed", "partial", "stale"] as const).map((k) => (
             <button key={k} className="btn small" onClick={() => seedDemo(k)}>
               {k}
@@ -301,60 +339,61 @@ export function QualityLab({
         const st = summarizeRun(r);
         const stale = r.ranAgainst !== fingerprint;
         return (
-          <div key={r.modelId}>
-            <h3 style={{ marginTop: 18, fontSize: 14 }}>
-              {r.modelId}:{" "}
+          <div key={r.modelId} className="lab-result">
+            <h3 className="lab-result-title">
+              {nameOf(r.modelId)}:{" "}
               <span className="num">
-                {st.passed}/{st.total} passed
-              </span>{" "}
-              <span className="hint">
-                {st.unreviewed > 0 ? `${st.unreviewed} unreviewed · ` : ""}
-                {r.source === "demo" ? "demo data, not real evidence" : "replies you supplied"}
-                {stale ? " · stale, configuration changed" : ""}
+                {st.passed} of {st.total} passed
+              </span>
+              <span className="lab-result-meta">
+                {st.unreviewed > 0 ? `${st.unreviewed} unreviewed. ` : ""}
+                {r.source === "demo" ? "Demo data, not real evidence." : "Replies you supplied."}
+                {stale ? " Stale: the prompt or reply cap has changed since." : ""}
               </span>
             </h3>
-            <table className="results-table">
-              <thead>
-                <tr>
-                  <th>Input</th>
-                  <th>Reply</th>
-                  <th>Est. tokens in/out</th>
-                  <th>Verdict</th>
-                </tr>
-              </thead>
-              <tbody>
-                {r.results.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.input.slice(0, 60)}</td>
-                    <td className="out">{s.output.slice(0, 400)}</td>
-                    <td className="num">
-                      {s.inputTokens}/{s.outputTokens}
-                    </td>
-                    <td>
-                      {s.pass === true && <span className="pass">pass</span>}
-                      {s.pass === false && <span className="fail">fail</span>}
-                      {s.pass === null && (
-                        <span>
-                          <span className="pending">judge: </span>
-                          <button
-                            className="btn small"
-                            onClick={() => overrideResult(r.modelId, i, true)}
-                          >
-                            pass
-                          </button>{" "}
-                          <button
-                            className="btn small"
-                            onClick={() => overrideResult(r.modelId, i, false)}
-                          >
-                            fail
-                          </button>
-                        </span>
-                      )}
-                    </td>
+            <div className="table-scroll">
+              <table className="results-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Input</th>
+                    <th scope="col">Reply</th>
+                    <th scope="col">Est. tokens in / out</th>
+                    <th scope="col">Result</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {r.results.map((s, i) => (
+                    <tr key={i}>
+                      <td>{s.input.slice(0, 60)}</td>
+                      <td className="out">{s.output.slice(0, 400)}</td>
+                      <td className="num">
+                        {s.inputTokens} / {s.outputTokens}
+                      </td>
+                      <td>
+                        {s.pass === true && <span className="pass">Pass</span>}
+                        {s.pass === false && <span className="fail">Fail</span>}
+                        {s.pass === null && (
+                          <span className="judge">
+                            <button
+                              className="btn small"
+                              onClick={() => overrideResult(r.modelId, i, true)}
+                            >
+                              Pass
+                            </button>
+                            <button
+                              className="btn small"
+                              onClick={() => overrideResult(r.modelId, i, false)}
+                            >
+                              Fail
+                            </button>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         );
       })}

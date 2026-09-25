@@ -13,7 +13,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "check": "npm run lint && npm test && npm run build && npm run verify:bundle",
-    "lint": "oxlint",
+    "lint": "oxlint src tests scripts vite.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "verify:bundle": "node scripts/check-static-bundle.mjs",
@@ -21,8 +21,8 @@
     "eval:live": "echo 'Sends fixture texts to Anthropic count_tokens (free endpoint). Requires ANTHROPIC_API_KEY.' && vitest run tests/live-accuracy.test.ts"
   },
   "dependencies": {
-    "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource-variable/hanken-grotesk": "^5.3.0",
     "gpt-tokenizer": "^3.4.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

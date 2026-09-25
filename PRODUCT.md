@@ -56,5 +56,6 @@ apology. Tokens are always translated into words, pages, and dollars.
 ## Accessibility & Inclusion
 
 Keyboard-reachable tooltips and controls, visible focus states, reduced
-motion respected, verified responsive to 390px, contrast maintained on the
-tinted paper palette (body text ≥4.5:1).
+motion respected, verified responsive to 390px, contrast measured in both
+themes (every text pair ≥4.5:1, input borders ≥3:1), nothing smaller than
+12px.
