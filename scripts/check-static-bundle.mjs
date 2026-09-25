@@ -35,6 +35,18 @@ for (const path of await filesUnder(root)) {
   }
 }
 
+// The production CSP allows fonts only from 'self' (vercel.json), so a font
+// inlined as a data: URI would be blocked in the browser.
+const inlinedFonts = []
+for (const path of await filesUnder(root)) {
+  if (extname(path) !== '.css') continue
+  if (/data:font\//.test(await readFile(path, 'utf8'))) inlinedFonts.push(relative(root, path))
+}
+if (inlinedFonts.length > 0) {
+  console.error(`Fonts inlined as data: URIs would be blocked by the CSP: ${inlinedFonts.join(', ')}`)
+  process.exit(1)
+}
+
 if (matches.length > 0) {
   console.error(`Static bundle contains a paid-provider client surface: ${matches.join(', ')}`)
   process.exit(1)
