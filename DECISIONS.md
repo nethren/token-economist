@@ -876,3 +876,12 @@ image were re-captured.
 
 Verification: the detector reports zero findings. Lint, 104 tests, build and
 bundle guard are clean.
+
+
+## 2026-10-27 — D33: Cloudflare Web Analytics
+
+The owner requested free traffic analytics for the hosted app. Add the
+asynchronous Cloudflare beacon and allow only its script and collection
+endpoint in the existing CSP. No custom events or form-input collection are
+configured. Keep DNS-only Vercel hosting and offline estimation/scoring.
+The site identifier is public configuration, not a provider credential.

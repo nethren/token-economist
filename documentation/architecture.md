@@ -23,8 +23,9 @@ calls a model and holds no provider credential.
 | Lint | Oxlint |
 | Persistence | Browser `localStorage` only |
 
-There is no database, account system, cookie session, telemetry SDK, hosted
-API, email system, scheduled work, or server-side rendering.
+There is no database, account system, cookie session, hosted API, email
+system, scheduled work, or server-side rendering. Cloudflare Web Analytics
+collects page traffic and browser performance metrics on the hosted site.
 
 ## Runtime mode
 
@@ -35,7 +36,10 @@ disabled in a hosted build, because nothing in the app calls a model provider.
 
 The browser may fetch the fixed public OpenRouter model-list endpoint to
 refresh price inputs. That request carries no prompt or user-entered content.
-It is the only outbound request the application makes.
+The hosted HTML also loads Cloudflare Web Analytics from
+`static.cloudflareinsights.com` and sends beacons to `cloudflareinsights.com`.
+No custom events or form-input collection are configured. Estimates and
+Quality Lab scoring still work without analytics or a network connection.
 
 ### How quality evidence gets in
 

@@ -511,7 +511,7 @@ export default function App() {
         className="link-btn"
         onClick={updatePrices}
         disabled={priceStatus.kind === "loading"}
-        title={`Downloads today's public price list from ${PRICE_SOURCE_NAME}. Your prompt is never sent. This is the only network call the app makes.`}
+        title={`Downloads today's public price list from ${PRICE_SOURCE_NAME}. Your prompt is never sent. The hosted site also uses Cloudflare for traffic and performance analytics.`}
       >
         Refresh prices
       </button>
@@ -888,7 +888,7 @@ export default function App() {
             <div>
               <h3>Under the hood</h3>
               <p>Built with React, TypeScript and Vite. An offline tokenizer and deterministic cost model account for conversation history, retries, caching and tools. Vitest checks the calculations and evidence rules. Provider differences and unknown reply lengths appear as ranges.</p>
-              <p>Prompts stay in your browser. Only the public price list is fetched; a dated snapshot works offline. Quality results are self-reported, and share links contain the prompt only when you choose to create one.</p>
+              <p>Prompts stay in your browser. The app fetches a public price list, and a dated snapshot works offline. The hosted site uses Cloudflare for traffic and performance analytics. Quality results are self-reported, and share links contain the prompt only when you choose to create one.</p>
             </div>
           </div>
         </section>

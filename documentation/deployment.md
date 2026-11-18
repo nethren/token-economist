@@ -26,9 +26,17 @@ runs the complete release gate and publishes `dist`.
 
 No environment variables belong in Preview or Production. The browser makes
 one allowed public request to OpenRouter for model prices; prompts, samples and
-quality evidence never enter that request. The security policy permits that
-origin and the inline width styles used by the charts, while blocking frames,
-plugins and all other network destinations.
+quality evidence never enter that request. The hosted page also loads the
+Cloudflare Web Analytics beacon from
+`https://static.cloudflareinsights.com/beacon.min.js`, which reports page
+traffic and browser performance metrics to `https://cloudflareinsights.com`. No
+custom events or form-input collection are configured (D33), and estimates and
+Quality Lab scoring work with the beacon blocked.
+
+The security policy permits the OpenRouter origin and the Cloudflare collection
+endpoint for network requests, the beacon script alone as an external script,
+and the inline width styles used by the charts. It blocks frames, plugins and
+all other network destinations.
 
 Deploy and verify a preview before promoting a production build.
 

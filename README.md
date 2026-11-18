@@ -150,3 +150,9 @@ production budget.
 ## License
 
 MIT
+
+## Hosted analytics
+
+The hosted site uses free Cloudflare Web Analytics for page traffic and browser
+performance metrics. No custom events or form-input collection are configured.
+Estimation and Quality Lab scoring remain local and work offline.
