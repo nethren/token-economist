@@ -41,7 +41,23 @@ export interface ModelSpec {
   /** Where the current prices came from: bundled snapshot (default) or an
    *  explicit, user-triggered live refresh. */
   priceSource?: "snapshot" | "live";
+  /** This model's slug in the public OpenRouter list, which both the browser
+   *  price refresh and the weekly model sync look it up by. */
+  openrouterSlug: string;
+  /** ISO date the provider retires this model, as the public list announces
+   *  it. Still estimable until then; flagged in the table and on the card. */
+  retiresOn?: string;
   notes?: string;
+}
+
+/** A model that has left the curated set. Kept so old share links resolve to
+ *  a named successor instead of silently landing somewhere else. */
+export interface RetiredModel {
+  id: string;
+  displayName: string;
+  retiredOn: string;
+  /** A current registry id. */
+  successorId: string;
 }
 
 /** Everything the user asserts about how the feature will run in production. */

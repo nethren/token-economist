@@ -16,7 +16,8 @@
 | `seo.md` | Present | Single public SPA route and final-domain social metadata |
 | `tests.md` | Present | Existing/proposed/gap separation and CI coverage |
 | `deployment.md` | Present | Vercel preview, custom-domain, smoke and rollback procedure |
-| Email / cron docs | N/A | No email or scheduled work exists |
+| `cron.md` | Present | Weekly model-sync PR: trigger, permissions, review |
+| Email docs | N/A | No email capability exists |
 
 ## Agent context
 
@@ -59,7 +60,8 @@ stopped them at the sink:
 - Quality evidence arrives as text the user pastes in. It is scored, never
   evaluated or executed, and it is labelled self-reported wherever it appears.
 - The public price refresh uses a fixed GET and maps only finite positive
-  prices for known slugs; no user content reaches it.
+  prices for bundled slugs; no user content reaches it. The weekly model sync
+  makes the same GET from CI and can only propose a PR.
 - Share-link prompt disclosure follows an explicit user action and uses a URL
   fragment; the privacy consequence is documented in-product.
 - React renders prompt and model output as text; no raw HTML, dynamic code,

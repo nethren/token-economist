@@ -885,3 +885,44 @@ asynchronous Cloudflare beacon and allow only its script and collection
 endpoint in the existing CSP. No custom events or form-input collection are
 configured. Keep DNS-only Vercel hosting and offline estimation/scoring.
 The site identifier is public configuration, not a provider credential.
+
+## 2026-11-18 — D34: The model list is curated, refreshed by a weekly PR
+
+The bundled lineup was a generation behind. Every bundled OpenRouter slug still
+resolved, so the live refresh kept prices current, but it could only reprice
+models that were already in the registry. OpenRouter also lists GPT-5 and
+GPT-5 mini as expiring on 2026-12-11. Letting the browser add models was
+rejected. Tier changes the recommendation and the cheaper-tier lint rule, the
+calibration band depends on the tokenizer, and the cache minimum isn't in the
+public list. The same browser could also show different users different
+lineups. So a person picks the models, and a job proposes the numbers.
+
+- The registry moves to `src/core/models.json`. `models.ts` validates it at
+  load and attaches calibration by provider, so a typo fails the build. Each
+  entry carries its `openrouterSlug`, replacing the hard-coded slug map in
+  `livePrices.ts`.
+- `src/core/modelSync.ts` (pure) and `scripts/sync-models.ts` (one public GET)
+  diff the registry against the list. They write only prices, context, max
+  output, `pricesAsOf`, `verifyPricing` and `retiresOn`, and they enforce
+  that boundary on their own output. A changed price is marked
+  `verifyPricing` because it came from an aggregator. New and vanished models
+  go into the report with a suggested entry, and are never added or removed.
+  A `candidatesSeenThrough` marker lists each new model once. Unchanged prices
+  don't move `pricesAsOf`, so a quiet week opens no PR and the stale flag
+  stays honest.
+- `.github/workflows/model-sync.yml` runs weekly. It runs `npm run check` and
+  opens or updates one PR on `chore/model-sync`. It holds no provider key.
+  Its only token is the repository `GITHUB_TOKEN`.
+- Retirement: `retiresOn` shows "retires <date>" in the table and on the card.
+  The model stays estimable and the recommendation logic is unchanged. A
+  retired model moves to `retired` with a `successorId`. A share link naming
+  it resolves to the successor and says so. An unknown id falls back to
+  `defaultReferenceId` with a note, instead of the old silent switch to the
+  literal `claude-sonnet-5`. Quality runs only last for the session, so
+  nothing stored needs migrating.
+- Copy that said "seven models" now counts the registry.
+
+The browser refresh is still price-only. Estimate, lint and card still take
+the registry as input and stay deterministic offline. This entry ships the
+mechanism only. The curated set is unchanged until the owner reviews the first
+sync PR.

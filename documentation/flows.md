@@ -27,7 +27,8 @@ called out in notes. No network fallback is allowed on this path.
 **Outcome:** Known model prices are updated in memory and cached locally.
 
 1. The browser sends a GET to the fixed OpenRouter model-list endpoint.
-2. The response is mapped only for hard-coded model slugs.
+2. The response is mapped only for each bundled model's `openrouterSlug`; it
+   never adds a model (the weekly sync PR does that, after review, see `cron.md`).
 3. Input and output prices must be finite positive numbers.
 4. Missing or malformed rows retain the bundled snapshot.
 5. A successful subset is cached in `localStorage` with its fetch time.

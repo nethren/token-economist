@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "./App.css";
-import { MODELS } from "./core/models";
+import { MODELS, modelCountWord } from "./core/models";
 import {
   autoLoadPrices,
   fetchLivePrices,
@@ -564,9 +564,10 @@ export default function App() {
           <h1 id="intro-title">What will this AI feature cost to run?</h1>
           <p className="intro-lede">
             Paste the prompt you plan to ship and a rough idea of usage. You get a monthly cost
-            range on seven models, what drives it, and what to cut, before anyone writes code. Your
+            range on {modelCountWord()} models, what drives it, and what to cut, before anyone writes code. Your
             prompt never leaves this page.
           </p>
+          {RESTORED?.referenceNote && <p className="example-note">{RESTORED.referenceNote}</p>}
           {activeExample && !RESTORED && (
             <p className="example-note">
               You're looking at the <strong>{activeExample.name.toLowerCase()}</strong> example.{" "}
@@ -879,7 +880,7 @@ export default function App() {
             </div>
             <div>
               <h3>Try the workflow</h3>
-              <p>Pick a template, adjust usage and reply length, then compare monthly ranges across seven models. Review suggested prompt savings and copy the cost card into a PRD or ticket.</p>
+              <p>Pick a template, adjust usage and reply length, then compare monthly ranges across {modelCountWord()} models. Review suggested prompt savings and copy the cost card into a PRD or ticket.</p>
             </div>
             <div>
               <h3>The product decision</h3>

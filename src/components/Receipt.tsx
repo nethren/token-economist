@@ -3,6 +3,7 @@ import type { Band, LintAction, LintFinding, ModelEstimate } from "../core/types
 import type { Recommendation } from "../core/card";
 import { BREAKDOWN_LABELS, fmtBand, fmtUSD } from "../core/card";
 import { VerifyBadge } from "./Badge";
+import { modelCountWord } from "../core/models";
 
 function usePrefersReducedMotion() {
   const [reduce, setReduce] = useState(
@@ -149,7 +150,7 @@ export function Receipt({
       <div className="decision decision--empty" id="receipt">
         <h2>Paste a prompt to see what it costs</h2>
         <p>
-          Put the prompt you plan to ship in step 1. You'll get a monthly range on seven models,
+          Put the prompt you plan to ship in step 1. You'll get a monthly range on {modelCountWord()} models,
           what drives it, and the cheapest one worth testing.
         </p>
         {emptyActions && <div className="dc-empty-actions">{emptyActions}</div>}

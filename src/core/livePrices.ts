@@ -7,24 +7,15 @@ import type { ModelSpec } from "./types";
  * downloads a public price table; the prompt is never transmitted.
  *
  * Source: OpenRouter's public model list (no key, CORS-open). Prices there
- * are USD per token, as strings. `applyLivePrices` is a pure function of
+ * are USD per token, as strings. Each registry entry carries its own
+ * `openrouterSlug`, so the refresh covers whatever models are bundled and
+ * never adds one. `applyLivePrices` is a pure function of
  * (models, payload, date) so the mapping is fully testable offline; only
  * `fetchLivePrices` touches the network.
  */
 
 export const PRICE_SOURCE_URL = "https://openrouter.ai/api/v1/models";
 export const PRICE_SOURCE_NAME = "openrouter.ai";
-
-/** Our registry id → OpenRouter model slug. Adding a model = one line here. */
-const SLUGS: Record<string, string> = {
-  "claude-opus-4-8": "anthropic/claude-opus-4.8",
-  "claude-sonnet-5": "anthropic/claude-sonnet-5",
-  "claude-haiku-4-5": "anthropic/claude-haiku-4.5",
-  "gpt-5": "openai/gpt-5",
-  "gpt-5-mini": "openai/gpt-5-mini",
-  "gemini-2.5-pro": "google/gemini-2.5-pro",
-  "gemini-2.5-flash": "google/gemini-2.5-flash",
-};
 
 export interface LivePriceResult {
   /** Full model list: updated copies where a live price was found, the
@@ -62,7 +53,7 @@ export function applyLivePrices(
   const updated: string[] = [];
   const missing: string[] = [];
   const next = models.map((m) => {
-    const row = bySlug.get(SLUGS[m.id] ?? "");
+    const row = bySlug.get(m.openrouterSlug);
     const pricing = (row?.pricing ?? null) as Record<string, unknown> | null;
     const input = perMTok(pricing?.prompt);
     const output = perMTok(pricing?.completion);

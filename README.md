@@ -9,7 +9,7 @@ documents, retries, caching, and a model reply. The cheapest option also needs
 a quality check before it earns a place in the PRD.
 
 With Token Economist, you turn a draft prompt and rough usage numbers into a
-live cost receipt across seven OpenAI, Anthropic, and Google models. You can see
+live cost receipt across a curated set of OpenAI, Anthropic, and Google models. You can see
 where the money goes, clean up expensive parts of the prompt, and copy the
 result into a PRD or ticket. The local Quality Lab lets you test a cheaper
 candidate against your own definition of “good enough.”
@@ -123,7 +123,9 @@ tests/           offline evaluation and boundary tests
 DECISIONS.md     append-only product and engineering decision log
 ```
 
-The model registry lives in `src/core/models.ts`, and the check pack in
+The model registry lives in `src/core/models.json` (validated by
+`src/core/models.ts` and refreshed by a weekly review PR, see
+[`documentation/cron.md`](documentation/cron.md)), and the check pack in
 `src/core/pack.ts`. There is no server directory, because there is no server.
 Start with
 [`documentation/architecture.md`](documentation/architecture.md) for the trust

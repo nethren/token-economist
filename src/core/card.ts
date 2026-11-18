@@ -6,7 +6,7 @@ import type {
   QualityCheck,
   ScaleAssumptions,
 } from "./types";
-import { STALE_PRICE_DAYS, priceAgeDays } from "./models";
+import { STALE_PRICE_DAYS, priceAgeDays, retirementNote } from "./models";
 
 /**
  * The cost card: a one-screen decision artifact rendered as Markdown so a PM
@@ -357,6 +357,7 @@ export function renderCard(opts: {
     const ageDays = priceAgeDays(e.model.pricesAsOf, date);
     const notes = [
       e.exceedsContext ? "⛔ exceeds context window" : "",
+      retirementNote(e.model, date) ?? "",
       ageDays > STALE_PRICE_DAYS
         ? `prices ${Math.round(ageDays / 30)} months old — verify`
         : e.model.verifyPricing

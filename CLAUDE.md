@@ -37,6 +37,10 @@ Read `README.md`, `PRODUCT.md`, `DECISIONS.md`, and
 ## Where to work
 
 - `src/core/`: pure product logic — estimation, lint, card, check pack, scoring.
+- `src/core/models.json`: the curated model registry. Which models are in it,
+  their tier and tokenizer handling are a person's call; the weekly model-sync
+  PR (`documentation/cron.md`) may change only prices, limits and retirement
+  dates.
 - `src/components/`, `src/App.tsx`: interface.
 - `tests/`: deterministic suite; live provider checks stay opt-in.
 - `documentation/`: architecture, boundaries, and shipping evidence.
