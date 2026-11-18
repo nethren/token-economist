@@ -8,6 +8,7 @@ provider credential in any form.
 | Name | Used by | Scope | Source | Rotation | Risk |
 |---|---|---|---|---|---|
 | `ANTHROPIC_API_KEY` | `npm run eval:live` only | Test process; never the app | Shell environment | Revoke/replace in the Anthropic console | Free token-counting endpoint; sends fixture texts, never user data |
+| `GITHUB_TOKEN` | `.github/workflows/model-sync.yml` | That workflow run; `contents` + `pull-requests` write | Issued by GitHub Actions per run | Automatic (expires with the run) | Can push `chore/model-sync` and open a PR; cannot merge or deploy |
 
 Nothing is read from a `VITE_`-prefixed variable, placed in `localStorage`, or
 bundled into production assets. The Quality Lab gets its evidence from a check

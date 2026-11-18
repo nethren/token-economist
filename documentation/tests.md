@@ -1,6 +1,6 @@
 # Test coverage
 
-The default deterministic gate is `npm test`: 104 tests pass across six test
+The default deterministic gate is `npm test`: 121 tests pass across seven test
 files. Five provider-truth tests are skipped unless `ANTHROPIC_API_KEY` is
 deliberately supplied. Nothing in the application can contact a model provider,
 so `eval:live` is the only path in the repository that reaches one, and it hits
@@ -33,6 +33,9 @@ repository does not yet require that check through a protected-branch rule.
 | Declared configuration wins | A pasted document that names a configuration id is stamped with it, so evidence from an earlier prompt reports stale | Re-badging old evidence as current fails | `flows.md` §4; `tests/card-measure.test.ts` | Unit | Existing |
 | Provenance on the card | The card attributes evidence to the author and marks demo data as demo data | Demo data rendering as a measurement fails | `tests/card-measure.test.ts` | Unit | Existing |
 | Provider token calibration | Anthropic truth falls inside the band and point error is within ±12% | Out-of-band counts fail | `EVAL.md`; `tests/live-accuracy.test.ts` | Guarded live | Existing, opt-in |
+| Model registry | `models.json` validates at load (tier, provider, positive prices, unique ids and slugs, retired successors exist, default reference exists); copy counts the registry | A typo in a tier or price fails the build and the suite | `src/core/models.ts`; `tests/model-sync.test.ts` | Unit | Existing |
+| Model sync | Writes only machine fields; a changed price is marked `verifyPricing`; new and vanished models are reported, never applied; each candidate is listed once; idempotent; a payload that doesn't look like the list throws | A sync touching tier/identity, or marking every model gone on a bad response, fails | `src/core/modelSync.ts`; `tests/model-sync.test.ts`; `cron.md` | Unit | Existing |
+| Retired models | A retired share-link model resolves to its named successor with a note; an unknown one to the default with a note; `retires <date>` follows the injected date on the card | A silent model swap on an old link fails | `tests/model-sync.test.ts` | Unit | Existing |
 | No-provider-client guard | The production bundle contains no provider hostname, provider-key identifier or direct-browser provider flag | A reintroduced paid path fails CI after the build | `scripts/check-static-bundle.mjs`; `.github/workflows/ci.yml` | Build gate | Existing |
 
 ## Proposed tests

@@ -137,7 +137,7 @@ describe("shareable permalink codec", () => {
   };
 
   it("round-trips state byte-exactly, including unicode and nulls", () => {
-    expect(decodeShareState(encodeShareState(state))).toEqual(state);
+    expect(decodeShareState(encodeShareState(state))).toEqual({ ...state, referenceNote: null });
   });
 
   it("encoding is URL-fragment safe and deterministic", () => {
@@ -166,6 +166,8 @@ describe("shareable permalink codec", () => {
     expect(s.assumptions.requestsPerMonth).toBe(DEFAULT_ASSUMPTIONS.requestsPerMonth);
     expect(s.assumptions.turnsPerConversation).toBe(7);
     expect(s.referenceId).toBe("claude-sonnet-5");
+    // Said, not silent: the link named a model this build doesn't carry.
+    expect(s.referenceNote).toContain("model-that-does-not-exist");
   });
 });
 
@@ -361,7 +363,7 @@ describe("feature presets", () => {
         assumptions: p.assumptions,
         referenceId: "claude-sonnet-5",
       };
-      expect(decodeShareState(encodeShareState(s))).toEqual(s);
+      expect(decodeShareState(encodeShareState(s))).toEqual({ ...s, referenceNote: null });
     }
   });
 });

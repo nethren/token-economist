@@ -1,6 +1,6 @@
 import type { ScaleAssumptions } from "./types";
 import { DEFAULT_ASSUMPTIONS } from "./types";
-import { MODELS } from "./models";
+import { resolveModelId } from "./models";
 
 /**
  * Shareable permalink codec: the whole design-time decision (feature name,
@@ -18,6 +18,12 @@ export interface ShareState {
   prompt: string;
   assumptions: ScaleAssumptions;
   referenceId: string;
+}
+
+/** A decoded link, plus what happened to a model the link named that this
+ *  build no longer carries (retired, or unknown). Never encoded. */
+export interface DecodedShare extends ShareState {
+  referenceNote: string | null;
 }
 
 const VERSION = 1;
@@ -38,7 +44,7 @@ export function encodeShareState(s: ShareState): string {
  * ill-typed assumption fields fall back to defaults; garbage returns null so
  * the app loads its normal first-run state.
  */
-export function decodeShareState(hash: string): ShareState | null {
+export function decodeShareState(hash: string): DecodedShare | null {
   try {
     const b64 = hash.replace(/^#/, "").replace(/-/g, "+").replace(/_/g, "/");
     if (b64 === "") return null;
@@ -63,16 +69,16 @@ export function decodeShareState(hash: string): ShareState | null {
       if (ok) (assumptions as Record<string, unknown>)[k] = v;
     }
 
-    const referenceId =
-      typeof p.referenceId === "string" && MODELS.some((m) => m.id === p.referenceId)
-        ? p.referenceId
-        : "claude-sonnet-5";
+    // A retired model resolves to its named successor and an unknown one to
+    // the default, with a note either way, never a silent swap.
+    const reference = resolveModelId(p.referenceId);
 
     return {
       featureName: typeof p.featureName === "string" ? p.featureName : "",
       prompt: p.prompt,
       assumptions,
-      referenceId,
+      referenceId: reference.id,
+      referenceNote: reference.note,
     };
   } catch {
     return null;

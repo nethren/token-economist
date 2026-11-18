@@ -24,7 +24,8 @@ calls a model and holds no provider credential.
 | Persistence | Browser `localStorage` only |
 
 There is no database, account system, cookie session, hosted API, email
-system, scheduled work, or server-side rendering. Cloudflare Web Analytics
+system, or server-side rendering. One scheduled job, a weekly GitHub Action,
+proposes model-registry updates as a pull request ([cron.md](cron.md)). Cloudflare Web Analytics
 collects page traffic and browser performance metrics on the hosted site.
 
 ## Runtime mode
@@ -59,7 +60,8 @@ card rather than papered over.
 | Boundary | Data crossing | Enforcement |
 |---|---|---|
 | User input → estimator | Prompt and numeric assumptions | Pure local functions; no network dependency |
-| Browser → OpenRouter | No user content; fixed model-list GET | Hard-coded HTTPS URL; numeric price validation; six-hour local cache |
+| Browser → OpenRouter | No user content; fixed model-list GET | Hard-coded HTTPS URL; numeric price validation; six-hour local cache; reprices bundled models only |
+| CI → OpenRouter → PR | No user content; same public GET, weekly | Writes only machine fields of `models.json` (checked); new or gone models are reported, never applied; a person merges |
 | Browser → share link | Feature name, prompt, assumptions, model ID | Explicit copy action; URL-safe JSON in the fragment; tolerant decoder |
 | Browser → check pack | Prompt, samples, check, reply cap, fingerprint | Explicit copy or download action; plain Markdown; leaves the app only when the user moves it |
 | User's AI tool → browser | Pasted replies | Treated as untrusted text: scored, never executed; blank stays unreviewed |
@@ -90,7 +92,9 @@ there is nothing to authenticate and nothing to leak.
   cannot confirm which model produced it, so every run is labelled with its
   source rather than presented as a first-party measurement.
 - Bundled model prices and model identifiers can become stale. The UI dates
-  price data and falls back explicitly when live refresh is unavailable.
+  price data and falls back explicitly when live refresh is unavailable. The
+  weekly model-sync PR surfaces new, changed, retiring and vanished models,
+  but the lineup changes only when the owner merges it.
 
 ## Related documents
 
@@ -102,5 +106,6 @@ there is nothing to authenticate and nothing to leak.
 - [Test coverage](tests.md)
 - [Shipping packet](shipping-packet.md)
 
-No email capability exists, so there is no `emails.md`. No scheduled or
-background work exists, so there is no `cron.md`.
+- [Scheduled work: weekly model sync](cron.md)
+
+No email capability exists, so there is no `emails.md`.
