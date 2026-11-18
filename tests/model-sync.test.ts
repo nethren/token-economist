@@ -26,6 +26,22 @@ const SHIPPED: RawRegistry = JSON.parse(
   readFileSync(new URL("../src/core/models.json", import.meta.url), "utf8"),
 );
 const clone = <T>(x: T): T => structuredClone(x);
+
+/**
+ * The shipped registry with sync state cleared: no retirement dates, no
+ * verify flags, and a seen-through marker before every fixture row. Sync
+ * behaviour is tested against this, so a real sync PR (which sets those
+ * fields in models.json) can't break the tests that judge it.
+ */
+const BASE: RawRegistry = (() => {
+  const r = clone(SHIPPED);
+  r.candidatesSeenThrough = "2026-09-01";
+  for (const m of r.models) {
+    delete m.retiresOn;
+    delete m.verifyPricing;
+  }
+  return r;
+})();
 const NOW = new Date("2026-11-18T12:00:00Z");
 const unix = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 
@@ -48,6 +64,7 @@ function row(id: string, inPerM: number, outPerM: number, extra: Record<string, 
 function echoList(reg: RawRegistry) {
   const rows = reg.models.map((m) =>
     row(m.openrouterSlug, m.inputPerMTok, m.outputPerMTok, {
+      expiration_date: m.retiresOn ?? null,
       context_length: m.contextWindow,
       top_provider: { context_length: m.contextWindow, max_completion_tokens: m.maxOutput },
       pricing: {
@@ -161,7 +178,7 @@ describe("live price refresh reads each model's own slug", () => {
 
 describe("model sync (weekly PR)", () => {
   it("an unchanged list changes nothing, so no PR opens", () => {
-    const r = syncModels(SHIPPED, echoList(SHIPPED), NOW);
+    const r = syncModels(BASE, echoList(BASE), NOW);
     expect(r.changed).toBe(false);
     expect(r.priceChanges).toEqual([]);
     expect(r.gone).toEqual([]);
@@ -169,8 +186,8 @@ describe("model sync (weekly PR)", () => {
   });
 
   it("applies price, limit and retirement changes; flags the price for verification", () => {
-    const list = echoList(SHIPPED);
-    const target = SHIPPED.models[0];
+    const list = echoList(BASE);
+    const target = BASE.models[0];
     const i = list.data.findIndex((x) => x.id === target.openrouterSlug);
     list.data[i] = {
       ...list.data[i],
@@ -178,7 +195,7 @@ describe("model sync (weekly PR)", () => {
       top_provider: { context_length: 2_000_000, max_completion_tokens: 64_000 },
       expiration_date: "2026-12-11",
     };
-    const r = syncModels(SHIPPED, list, NOW);
+    const r = syncModels(BASE, list, NOW);
     const m = r.next.models[0];
     expect(r.changed).toBe(true);
     expect(m).toMatchObject({
@@ -193,29 +210,29 @@ describe("model sync (weekly PR)", () => {
     expect(r.priceChanges.map((c) => c.field)).toEqual(["inputPerMTok", "outputPerMTok"]);
     expect(r.retirementChanges).toHaveLength(1);
     // Untouched models keep their snapshot date.
-    expect(r.next.models[1].pricesAsOf).toBe(SHIPPED.models[1].pricesAsOf);
+    expect(r.next.models[1].pricesAsOf).toBe(BASE.models[1].pricesAsOf);
     // Second run on its own output is a no-op: the job is idempotent.
     expect(syncModels(r.next, list, NOW).changed).toBe(false);
   });
 
   it("clears a retirement date the list withdrew", () => {
-    const reg = clone(SHIPPED);
+    const reg = clone(BASE);
     reg.models[0].retiresOn = "2026-12-11";
-    const r = syncModels(reg, echoList(SHIPPED), NOW);
+    const r = syncModels(reg, echoList(BASE), NOW);
     expect(r.next.models[0].retiresOn).toBeUndefined();
   });
 
   it("reports a vanished model as gone and never removes it", () => {
-    const list = echoList(SHIPPED);
-    list.data = list.data.filter((x) => x.id !== SHIPPED.models[0].openrouterSlug);
-    const r = syncModels(SHIPPED, list, NOW);
-    expect(r.gone.map((g) => g.id)).toEqual([SHIPPED.models[0].id]);
-    expect(r.next.models).toHaveLength(SHIPPED.models.length);
+    const list = echoList(BASE);
+    list.data = list.data.filter((x) => x.id !== BASE.models[0].openrouterSlug);
+    const r = syncModels(BASE, list, NOW);
+    expect(r.gone.map((g) => g.id)).toEqual([BASE.models[0].id]);
+    expect(r.next.models).toHaveLength(BASE.models.length);
     expect(r.changed).toBe(false);
   });
 
   it("lists new text models from the curated providers once, with a suggested entry", () => {
-    const list = echoList(SHIPPED);
+    const list = echoList(BASE);
     const created = unix("2026-11-10T08:00:00Z");
     list.data.push(
       row("anthropic/claude-new-1", 3, 15, { created }),
@@ -227,7 +244,7 @@ describe("model sync (weekly PR)", () => {
       }),
       row("other-lab/new-thing", 1, 2, { created }),
     );
-    const r = syncModels(SHIPPED, list, NOW);
+    const r = syncModels(BASE, list, NOW);
     expect(r.candidates.map((c) => c.slug)).toEqual(["anthropic/claude-new-1"]);
     const c = r.candidates[0];
     expect(c.suggestedEntry).toMatchObject({ provider: "anthropic", openrouterSlug: c.slug, verifyPricing: true });
@@ -240,45 +257,45 @@ describe("model sync (weekly PR)", () => {
   });
 
   it("reports cache and batch multiplier drift without applying it", () => {
-    const list = echoList(SHIPPED);
-    const m = SHIPPED.models[0];
+    const list = echoList(BASE);
+    const m = BASE.models[0];
     const i = list.data.findIndex((x) => x.id === m.openrouterSlug);
     list.data[i] = {
       ...list.data[i],
       pricing: { ...list.data[i].pricing, input_cache_read: String((m.inputPerMTok * 0.25) / 1e6) },
     };
     list.data.push(row(`${m.openrouterSlug}:batch`, m.inputPerMTok * 0.4, m.outputPerMTok * 0.4));
-    const r = syncModels(SHIPPED, list, NOW);
+    const r = syncModels(BASE, list, NOW);
     expect(r.toCheck.map((c) => c.field).sort()).toEqual(["batchMult", "cacheReadMult"]);
     expect(r.next.models[0].cacheReadMult).toBe(m.cacheReadMult);
     expect(r.changed).toBe(false);
   });
 
   it("refuses a payload that doesn't look like the model list", () => {
-    expect(() => syncModels(SHIPPED, null, NOW)).toThrow(/looks wrong/);
-    expect(() => syncModels(SHIPPED, { data: [] }, NOW)).toThrow(/looks wrong/);
+    expect(() => syncModels(BASE, null, NOW)).toThrow(/looks wrong/);
+    expect(() => syncModels(BASE, { data: [] }, NOW)).toThrow(/looks wrong/);
     const strangers = { data: Array.from({ length: 50 }, (_, i) => row(`x/y-${i}`, 1, 1)) };
-    expect(() => syncModels(SHIPPED, strangers, NOW)).toThrow(/looks wrong/);
+    expect(() => syncModels(BASE, strangers, NOW)).toThrow(/looks wrong/);
   });
 
   it("the machine-field boundary is enforced, not assumed", () => {
     expect(MACHINE_FIELDS).not.toContain("tier");
-    const after = clone(SHIPPED);
+    const after = clone(BASE);
     after.models[0].tier = "economy" === after.models[0].tier ? "frontier" : "economy";
-    expect(() => assertOnlyMachineFields(SHIPPED, after)).toThrow(/curated field/);
-    const dropped = clone(SHIPPED);
+    expect(() => assertOnlyMachineFields(BASE, after)).toThrow(/curated field/);
+    const dropped = clone(BASE);
     dropped.models.pop();
-    expect(() => assertOnlyMachineFields(SHIPPED, dropped)).toThrow(/model set/);
-    const reref = clone(SHIPPED);
-    reref.defaultReferenceId = reref.models.find((m) => m.id !== SHIPPED.defaultReferenceId)!.id;
-    expect(() => assertOnlyMachineFields(SHIPPED, reref)).toThrow(/registry field/);
+    expect(() => assertOnlyMachineFields(BASE, dropped)).toThrow(/model set/);
+    const reref = clone(BASE);
+    reref.defaultReferenceId = reref.models.find((m) => m.id !== BASE.defaultReferenceId)!.id;
+    expect(() => assertOnlyMachineFields(BASE, reref)).toThrow(/registry field/);
   });
 
   it("the PR body is deterministic and says what was and wasn't applied", () => {
-    const list = echoList(SHIPPED);
-    list.data = list.data.filter((x) => x.id !== SHIPPED.models[0].openrouterSlug);
+    const list = echoList(BASE);
+    list.data = list.data.filter((x) => x.id !== BASE.models[0].openrouterSlug);
     list.data.push(row("google/gemini-next", 2, 10, { created: unix("2026-11-10") }));
-    const r = syncModels(SHIPPED, list, NOW);
+    const r = syncModels(BASE, list, NOW);
     const body = renderReport(r, NOW);
     expect(renderReport(r, NOW)).toBe(body);
     expect(body).toContain("Model sync — 2026-11-18");
