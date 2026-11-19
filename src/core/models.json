@@ -1,6 +1,6 @@
 {
   "defaultReferenceId": "claude-sonnet-5",
-  "candidatesSeenThrough": "2026-09-01",
+  "candidatesSeenThrough": "2026-11-18T13:02:57.000Z",
   "models": [
     {
       "id": "claude-opus-4-8",
@@ -65,7 +65,8 @@
       "batchMult": 0.5,
       "contextWindow": 400000,
       "maxOutput": 128000,
-      "pricesAsOf": "2026-09-01"
+      "pricesAsOf": "2026-09-01",
+      "retiresOn": "2026-12-11"
     },
     {
       "id": "gpt-5-mini",
@@ -81,7 +82,8 @@
       "batchMult": 0.5,
       "contextWindow": 400000,
       "maxOutput": 128000,
-      "pricesAsOf": "2026-09-01"
+      "pricesAsOf": "2026-09-01",
+      "retiresOn": "2026-12-11"
     },
     {
       "id": "gemini-2.5-pro",
@@ -96,8 +98,8 @@
       "cacheReadMult": 0.1,
       "cacheWriteMult": 1,
       "batchMult": 0.5,
-      "contextWindow": 1000000,
-      "maxOutput": 65000,
+      "contextWindow": 1048576,
+      "maxOutput": 65536,
       "pricesAsOf": "2026-09-01"
     },
     {
@@ -112,8 +114,8 @@
       "cacheReadMult": 0.1,
       "cacheWriteMult": 1,
       "batchMult": 0.5,
-      "contextWindow": 1000000,
-      "maxOutput": 65000,
+      "contextWindow": 1048576,
+      "maxOutput": 65535,
       "pricesAsOf": "2026-09-01"
     }
   ],
