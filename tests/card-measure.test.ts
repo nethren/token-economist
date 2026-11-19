@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { recommend, renderCard, fmtUSD } from "../src/core/card";
 import { estimateAll } from "../src/core/estimate";
-import { MODELS, getModel } from "../src/core/models";
+import { MODELS } from "../src/core/models";
 import { DEFAULT_ASSUMPTIONS, type MeasureRun } from "../src/core/types";
 import {
   buildPastedRun,
@@ -12,6 +12,7 @@ import {
 } from "../src/core/measure";
 import { parseReplyPack, renderCheckPack } from "../src/core/pack";
 import { BLOATED_PROMPT } from "./fixtures";
+import { CHEAPEST, PRICIEST, REFERENCE, pick } from "./models";
 
 const fakeRun = (modelId: string, passes: boolean[]): MeasureRun => ({
   modelId,
@@ -71,8 +72,8 @@ describe("recommendation policy", () => {
   });
 
   it("with quality data: picks the CHEAPEST model that passes", () => {
-    const cheap = getModel("gpt-5-mini");
-    const expensive = getModel("claude-opus-4-8");
+    const cheap = CHEAPEST;
+    const expensive = PRICIEST;
     const runs = [fakeRun(expensive.id, [true, true, true]), fakeRun(cheap.id, [true, true, true])];
     const rec = recommend(estimates, runs, "fp");
     expect(rec!.verified).toBe(true);
@@ -81,11 +82,11 @@ describe("recommendation policy", () => {
 
   it("a cheap model that fails the check is not recommended", () => {
     const runs = [
-      fakeRun("gpt-5-mini", [false, false, true]),
-      fakeRun("claude-sonnet-5", [true, true, true]),
+      fakeRun(CHEAPEST.id, [false, false, true]),
+      fakeRun(REFERENCE.id, [true, true, true]),
     ];
     const rec = recommend(estimates, runs, "fp");
-    expect(rec!.estimate.model.id).toBe("claude-sonnet-5");
+    expect(rec!.estimate.model.id).toBe(REFERENCE.id);
   });
 });
 
@@ -98,7 +99,7 @@ describe("cost card", () => {
       estimates,
       assumptions: DEFAULT_ASSUMPTIONS,
       findings: [],
-      runs: [fakeRun("claude-haiku-4-5", [true, true, false])],
+      runs: [fakeRun(pick("anthropic", "economy").id, [true, true, false])],
       recommendation: recommend(estimates, [], "fp"),
       currentFingerprint: "fp",
       generatedAt: "2026-07-12",
@@ -121,7 +122,7 @@ describe("cost card", () => {
       estimates,
       assumptions: DEFAULT_ASSUMPTIONS,
       findings: [],
-      runs: [fakeRun("claude-haiku-4-5", [true, true, true])],
+      runs: [fakeRun(pick("anthropic", "economy").id, [true, true, true])],
       recommendation: recommend(estimates, [], "fp"),
       currentFingerprint: "fp",
       generatedAt: "2026-07-12",
@@ -132,7 +133,7 @@ describe("cost card", () => {
 
   it("marks demo data as demo data, so it can never pass as a measurement", () => {
     const estimates = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, MODELS);
-    const demo: MeasureRun = { ...fakeRun("claude-haiku-4-5", [true, true, true]), source: "demo" };
+    const demo: MeasureRun = { ...fakeRun(pick("anthropic", "economy").id, [true, true, true]), source: "demo" };
     const card = renderCard({
       featureName: "Ticket classifier",
       prompt: BLOATED_PROMPT,
@@ -157,7 +158,7 @@ describe("cost card", () => {
  * offline. Nothing here may call a provider or imply the tool did.
  */
 describe("bring-your-own-AI evidence", () => {
-  const m = getModel("claude-haiku-4-5");
+  const m = pick("anthropic", "economy");
   const samples = ["ticket one", "ticket two", "ticket three"];
   const build = (outputs: string[], maxTokens = 300) =>
     buildPastedRun({
@@ -202,7 +203,7 @@ describe("bring-your-own-AI evidence", () => {
 });
 
 describe("check pack", () => {
-  const m = getModel("claude-haiku-4-5");
+  const m = pick("anthropic", "economy");
   const pack = renderCheckPack({
     featureName: "Ticket classifier",
     prompt: BLOATED_PROMPT,
@@ -319,7 +320,7 @@ describe("parseReplyPack", () => {
   });
 
   it("stamps a run with the configuration the document declares, not the current one", () => {
-    const m = getModel("claude-haiku-4-5");
+    const m = pick("anthropic", "economy");
     const run = buildPastedRun({
       model: m,
       prompt: "a prompt",
@@ -336,14 +337,14 @@ describe("parseReplyPack", () => {
 
 describe("Tier-2 guardrails (no network in these tests)", () => {
   it("cost preview is computed before any spend and uses the high bound", () => {
-    const m = getModel("claude-haiku-4-5");
+    const m = pick("anthropic", "economy");
     const { totalUSD } = previewRunCost(m, BLOATED_PROMPT, ["ticket one", "ticket two"], 500);
     expect(totalUSD).toBeGreaterThan(0);
     expect(totalUSD).toBeLessThan(0.1); // sanity: a handful of samples is cents
   });
 
   it("sample count is hard-bounded", () => {
-    const m = getModel("claude-haiku-4-5");
+    const m = pick("anthropic", "economy");
     const many = Array.from({ length: 50 }, (_, i) => `sample ${i}`);
     const capped = previewRunCost(m, "short prompt", many, 100);
     const atMax = previewRunCost(m, "short prompt", many.slice(0, MAX_SAMPLES_PER_RUN), 100);

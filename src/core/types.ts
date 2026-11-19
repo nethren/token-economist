@@ -8,7 +8,7 @@ export interface Band {
 export type Provider = "anthropic" | "openai" | "google";
 
 export interface ModelSpec {
-  /** API model id, e.g. "claude-haiku-4-5" */
+  /** API model id, e.g. "claude-haiku-5-5" */
   id: string;
   provider: Provider;
   displayName: string;

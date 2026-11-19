@@ -18,8 +18,8 @@ import {
 } from "../src/core/modelSync";
 import { applyLivePrices } from "../src/core/livePrices";
 import { estimateAll } from "../src/core/estimate";
-import { recommend, renderCard } from "../src/core/card";
-import { DEFAULT_ASSUMPTIONS } from "../src/core/types";
+import { cheapestUsable, recommend, renderCard } from "../src/core/card";
+import { DEFAULT_ASSUMPTIONS, type MeasureRun } from "../src/core/types";
 import { BLOATED_PROMPT } from "./fixtures";
 
 const SHIPPED: RawRegistry = JSON.parse(
@@ -118,6 +118,9 @@ describe("registry (models.json)", () => {
 describe("retired and unknown model ids (share links)", () => {
   const reg = (() => {
     const r = clone(SHIPPED);
+    // Start from no retired entries: the shipped ones name successors that
+    // this fixture may have just removed.
+    r.retired = [];
     const gone = r.models.shift()!;
     r.retired.push({ id: gone.id, displayName: gone.displayName, retiredOn: "2026-12-11", successorId: r.models[0].id });
     r.defaultReferenceId = r.models[0].id;
@@ -163,6 +166,48 @@ describe("retiring models in the table and on the card", () => {
       generatedAt: "2026-11-18",
     });
     expect(card).toMatch(new RegExp(`${models[0].displayName} \\|.*retires 2026-12-11`));
+  });
+
+  /** The registry with its cheapest model (by this estimate) marked retiring. */
+  const withCheapestRetiring = () => {
+    const base = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, MODELS);
+    const cheapestId = [...base].sort((a, b) => a.costPerMonth.point - b.costPerMonth.point)[0].model.id;
+    const models = MODELS.map((m) => (m.id === cheapestId ? { ...m, retiresOn: "2026-12-11" } : m));
+    return { cheapestId, models, estimates: estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, models) };
+  };
+
+  it("a retiring model is never 'start here' or a step up, but stays in the comparison", () => {
+    const { cheapestId, models, estimates } = withCheapestRetiring();
+    const rec = recommend(estimates, [], "fp")!;
+    expect(rec.estimate.model.id).not.toBe(cheapestId);
+    expect(rec.shortlist.map((s) => s.estimate.model.id)).not.toContain(cheapestId);
+    expect(rec.stepUp?.model.id).not.toBe(cheapestId);
+    // "Cheapest" must not contradict the table: the reason names what it skipped.
+    const skipped = models.find((m) => m.id === cheapestId)!.displayName;
+    expect(rec.reason).toContain(`${skipped} costs less but is being retired`);
+    // Still estimated and shown: excluded from advice, not from the table.
+    expect(estimates.map((e) => e.model.id)).toContain(cheapestId);
+    // The linter's cheaper-tier answer agrees with the headline.
+    expect(cheapestUsable(estimates)!.model.id).toBe(rec.estimate.model.id);
+    // A passing run on the retiring model does not make it the pick either.
+    const run: MeasureRun = {
+      modelId: cheapestId,
+      check: { kind: "json" },
+      results: [{ input: "x", output: "{}", pass: true, inputTokens: 1, outputTokens: 1, costUSD: 0, cached: false, latencyMs: 0 }],
+      totalCostUSD: 0,
+      ranAt: "2026-11-18T00:00:00Z",
+      ranAgainst: "fp",
+      source: "byo",
+    };
+    expect(recommend(estimates, [run], "fp")!.estimate.model.id).not.toBe(cheapestId);
+    expect(models.find((m) => m.id === cheapestId)!.retiresOn).toBe("2026-12-11");
+  });
+
+  it("when every model is retiring, the cheapest is still recommended rather than nothing", () => {
+    const models = MODELS.map((m) => ({ ...m, retiresOn: "2026-12-11" }));
+    const estimates = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, models);
+    const cheapest = [...estimates].sort((a, b) => a.costPerMonth.point - b.costPerMonth.point)[0];
+    expect(recommend(estimates, [], "fp")!.estimate.model.id).toBe(cheapest.model.id);
   });
 });
 
@@ -213,6 +258,20 @@ describe("model sync (weekly PR)", () => {
     expect(r.next.models[1].pricesAsOf).toBe(BASE.models[1].pricesAsOf);
     // Second run on its own output is a no-op: the job is idempotent.
     expect(syncModels(r.next, list, NOW).changed).toBe(false);
+  });
+
+  it("reports a reply cap above half the context window instead of applying it", () => {
+    const list = echoList(BASE);
+    const target = BASE.models[0];
+    const i = list.data.findIndex((x) => x.id === target.openrouterSlug);
+    list.data[i] = {
+      ...list.data[i],
+      top_provider: { context_length: target.contextWindow, max_completion_tokens: Math.round(target.contextWindow * 0.9) },
+    };
+    const r = syncModels(BASE, list, NOW);
+    expect(r.next.models[0].maxOutput).toBe(target.maxOutput);
+    expect(r.limitChanges).toEqual([]);
+    expect(r.toCheck.map((c) => c.field)).toContain("maxOutput");
   });
 
   it("clears a retirement date the list withdrew", () => {

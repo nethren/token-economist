@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { estimateAll, estimateModel } from "../src/core/estimate";
-import { MODELS, getModel, priceAgeDays, STALE_PRICE_DAYS } from "../src/core/models";
+import { MODELS, priceAgeDays, STALE_PRICE_DAYS } from "../src/core/models";
 import { DEFAULT_ASSUMPTIONS } from "../src/core/types";
 import { fmtBreakdown, recommend, renderCard } from "../src/core/card";
 import { decodeShareState, encodeShareState, type ShareState } from "../src/core/share";
@@ -15,8 +15,9 @@ import { afterEach, vi } from "vitest";
 import { PRESETS } from "../src/core/presets";
 import { INPUT_SIZES, OUTPUT_SIZES, matchSize } from "../src/core/sizes";
 import { BLOATED_PROMPT } from "./fixtures";
+import { REFERENCE, pick } from "./models";
 
-const model = getModel("claude-haiku-4-5");
+const model = pick("anthropic", "economy");
 
 describe("cost breakdown (where the money goes)", () => {
   it("components sum exactly to the point cost, for every model and shape", () => {
@@ -133,7 +134,7 @@ describe("shareable permalink codec", () => {
       useCaching: true,
       reasoningTokensPerTurn: 100,
     },
-    referenceId: "gpt-5-mini",
+    referenceId: pick("openai", "economy").id,
   };
 
   it("round-trips state byte-exactly, including unicode and nulls", () => {
@@ -165,35 +166,38 @@ describe("shareable permalink codec", () => {
     const s = decodeShareState(tampered)!;
     expect(s.assumptions.requestsPerMonth).toBe(DEFAULT_ASSUMPTIONS.requestsPerMonth);
     expect(s.assumptions.turnsPerConversation).toBe(7);
-    expect(s.referenceId).toBe("claude-sonnet-5");
+    expect(s.referenceId).toBe(REFERENCE.id);
     // Said, not silent: the link named a model this build doesn't carry.
     expect(s.referenceNote).toContain("model-that-does-not-exist");
   });
 });
 
 describe("live price refresh (opt-in; the mapper is pure and offline)", () => {
+  const haikuTier = pick("anthropic", "economy");
+  const openaiCheap = pick("openai", "economy");
+  const malformed = pick("openai", "frontier");
   const payload = {
     data: [
-      { id: "anthropic/claude-haiku-4-5".replace("4-5", "4.5"), pricing: { prompt: "0.0000012", completion: "0.000006" } },
-      { id: "openai/gpt-5-mini", pricing: { prompt: "0.0000003", completion: "0.0000025" } },
-      { id: "openai/gpt-5", pricing: { prompt: "not-a-number", completion: "0.00001" } },
+      { id: haikuTier.openrouterSlug, pricing: { prompt: "0.0000012", completion: "0.000006" } },
+      { id: openaiCheap.openrouterSlug, pricing: { prompt: "0.0000003", completion: "0.0000025" } },
+      { id: malformed.openrouterSlug, pricing: { prompt: "not-a-number", completion: "0.00001" } },
     ],
   };
 
   it("updates matched models, stamps date/source, and leaves the rest on snapshot", () => {
     const r = applyLivePrices(MODELS, payload, "2026-07-17");
-    const haiku = r.models.find((m) => m.id === "claude-haiku-4-5")!;
+    const haiku = r.models.find((m) => m.id === haikuTier.id)!;
     expect(haiku.inputPerMTok).toBeCloseTo(1.2, 10);
     expect(haiku.outputPerMTok).toBeCloseTo(6.0, 10);
     expect(haiku.pricesAsOf).toBe("2026-07-17");
     expect(haiku.priceSource).toBe("live");
     expect(haiku.verifyPricing).toBe(false);
     // malformed pricing and uncovered models stay untouched
-    const gpt5 = r.models.find((m) => m.id === "gpt-5")!;
-    expect(gpt5.inputPerMTok).toBe(getModel("gpt-5").inputPerMTok);
-    expect(gpt5.priceSource).toBeUndefined();
-    expect(r.updated).toContain("Claude Haiku 4.5");
-    expect(r.missing).toContain("GPT-5");
+    const bad = r.models.find((m) => m.id === malformed.id)!;
+    expect(bad.inputPerMTok).toBe(malformed.inputPerMTok);
+    expect(bad.priceSource).toBeUndefined();
+    expect(r.updated).toContain(haikuTier.displayName);
+    expect(r.missing).toContain(malformed.displayName);
   });
 
   it("does not mutate the bundled registry", () => {
@@ -239,7 +243,7 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
   };
   const NOW = Date.parse("2026-07-17T12:00:00Z");
   const goodPayload = {
-    data: [{ id: "openai/gpt-5-mini", pricing: { prompt: "0.0000004", completion: "0.000003" } }],
+    data: [{ id: pick("openai", "economy").openrouterSlug, pricing: { prompt: "0.0000004", completion: "0.000003" } }],
   };
 
   afterEach(() => vi.unstubAllGlobals());
@@ -253,8 +257,8 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
     rememberPrices(storage, fetched, NOW - PRICE_CACHE_TTL_MS / 2);
     const r = await autoLoadPrices(MODELS, storage, NOW);
     expect(r?.via).toBe("cache");
-    expect(r?.models.find((m) => m.id === "gpt-5-mini")?.inputPerMTok).toBeCloseTo(0.4, 10);
-    expect(r?.models.find((m) => m.id === "gpt-5-mini")?.priceSource).toBe("live");
+    expect(r?.models.find((m) => m.id === pick("openai", "economy").id)?.inputPerMTok).toBeCloseTo(0.4, 10);
+    expect(r?.models.find((m) => m.id === pick("openai", "economy").id)?.priceSource).toBe("live");
   });
 
   it("stale cache: fetches fresh prices and re-remembers them", async () => {
@@ -268,7 +272,7 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
     const r = await autoLoadPrices(MODELS, storage, NOW);
     expect(calls).toBe(1);
     expect(r?.via).toBe("network");
-    expect(storage.dump()[PRICE_CACHE_KEY]).toContain("gpt-5-mini");
+    expect(storage.dump()[PRICE_CACHE_KEY]).toContain(pick("openai", "economy").id);
   });
 
   it("fetch fails with a stale cache: falls back to last known prices", async () => {
@@ -279,7 +283,7 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
     rememberPrices(storage, applyLivePrices(MODELS, goodPayload, "2026-07-01"), NOW - PRICE_CACHE_TTL_MS * 10);
     const r = await autoLoadPrices(MODELS, storage, NOW);
     expect(r?.via).toBe("cache");
-    expect(r?.models.find((m) => m.id === "gpt-5-mini")?.priceSource).toBe("live");
+    expect(r?.models.find((m) => m.id === pick("openai", "economy").id)?.priceSource).toBe("live");
   });
 
   it("first run offline: returns null so the app keeps the bundled snapshot", async () => {
@@ -361,7 +365,7 @@ describe("feature presets", () => {
         featureName: p.featureName,
         prompt: p.prompt,
         assumptions: p.assumptions,
-        referenceId: "claude-sonnet-5",
+        referenceId: REFERENCE.id,
       };
       expect(decodeShareState(encodeShareState(s))).toEqual({ ...s, referenceNote: null });
     }

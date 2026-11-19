@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { countBaseTokens, calibrated, tokensFromWords } from "../src/core/tokenizer";
-import { getModel } from "../src/core/models";
 import { TOKEN_FIXTURES } from "./fixtures";
+import { pick } from "./models";
 
 /**
  * §7 "Cost accuracy": the same input must always yield the same count, and
@@ -37,7 +37,7 @@ describe("offline tokenizer", () => {
   });
 
   it("calibration bands are ordered and conservative for Anthropic", () => {
-    const m = getModel("claude-haiku-4-5");
+    const m = pick("anthropic", "economy");
     const b = calibrated(1000, m);
     expect(b.low).toBeLessThanOrEqual(b.point);
     expect(b.point).toBeLessThanOrEqual(b.high);

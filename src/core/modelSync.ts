@@ -187,7 +187,12 @@ export function syncModels(registry: RawRegistry, payload: unknown, now: Date): 
       m.contextWindow = ctx;
     }
     const maxOut = positiveInt(top.max_completion_tokens);
-    if (maxOut !== null && maxOut !== m.maxOutput) {
+    // A reply cap above half the context window is the list echoing the
+    // context size (seen on Gemini 4 rows: 943,718 of 1,048,576, where Google
+    // documents 64K). Report it for a person to check; never apply it.
+    if (maxOut !== null && maxOut !== m.maxOutput && maxOut > m.contextWindow / 2) {
+      note(toCheck, "maxOutput", m.maxOutput, maxOut);
+    } else if (maxOut !== null && maxOut !== m.maxOutput) {
       note(limitChanges, "maxOutput", m.maxOutput, maxOut);
       m.maxOutput = maxOut;
     }
@@ -405,7 +410,7 @@ export function renderReport(r: SyncResult, now: Date): string {
     L.push("");
   }
   if (r.toCheck.length > 0) {
-    L.push("**Multipliers that differ from the public list.** Not applied: check the provider's docs and edit by hand if they moved.");
+    L.push("**Values that differ from the public list but look unreliable there.** Not applied: check the provider's docs and edit by hand if they moved.");
     L.push("");
     L.push(...changeTable(r.toCheck), "");
   }
