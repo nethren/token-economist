@@ -23,7 +23,9 @@ never changes the deployed app by itself (DECISIONS.md D34).
    table. `assertOnlyMachineFields()` throws if anything else moved.
 3. Reports, without applying: new text models from Anthropic, OpenAI and
    Google, each with a suggested entry; curated models that vanished from the
-   list; and cache or batch multipliers that differ.
+   list; cache or batch multipliers that differ; and a max output above half
+   the context window, which the list reports for some models where it is
+   really echoing the context size.
 4. If `models.json` changed, runs `npm run check` and force-pushes the branch
    `chore/model-sync`, then opens or updates one PR whose body is the report
    plus the check outcome. If nothing changed, it exits and opens no PR.

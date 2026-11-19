@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { lintPrompt } from "../src/core/lint";
-import { MODELS, getModel } from "../src/core/models";
+import { MODELS } from "../src/core/models";
 import { countBaseTokens } from "../src/core/tokenizer";
 import { estimateAll } from "../src/core/estimate";
 import { recommend } from "../src/core/card";
 import { DEFAULT_ASSUMPTIONS } from "../src/core/types";
 import { BLOATED_PROMPT, FAQ_DUMP_PROMPT } from "./fixtures";
+import { REFERENCE } from "./models";
 
 /**
  * §7 "Suggestion usefulness": on a deliberately bloated prompt, the top
@@ -13,7 +14,7 @@ import { BLOATED_PROMPT, FAQ_DUMP_PROMPT } from "./fixtures";
  * machine-applicable fixes and re-tokenize; no self-reported savings allowed.
  */
 
-const REF = getModel("claude-sonnet-5");
+const REF = REFERENCE;
 const A = { ...DEFAULT_ASSUMPTIONS, requestsPerMonth: 50_000 };
 
 describe("linter on a deliberately bloated prompt", () => {

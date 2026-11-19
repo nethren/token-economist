@@ -926,3 +926,61 @@ The browser refresh is still price-only. Estimate, lint and card still take
 the registry as input and stay deterministic offline. This entry ships the
 mechanism only. The curated set is unchanged until the owner reviews the first
 sync PR.
+
+## 2026-11-19 — D35: Current-generation lineup; retiring models leave the advice
+
+The first sync PR (#4) showed the bundled lineup a generation behind and
+GPT-5 and GPT-5 mini retiring on 2026-12-11. The owner asked for the lineup to
+be updated, retiring models to be kept out of the recommendation, and the
+OpenAI tokenizer question to be settled.
+
+- **Lineup**: one model per provider per tier, nine in all. Anthropic: Claude
+  Opus 5.5 (frontier), Sonnet 5.5 (workhorse), Haiku 5.5 (economy). OpenAI:
+  GPT-6.2 Astra, GPT-6.2 Sol, GPT-6 Luna. Google: Gemini 4 Carbon, Gemini 4
+  Hydrogen, Gemini 3.8 Flash. Tiers follow each provider's own positioning
+  ("strongest reasoning", "everyday", "most efficient"). Claude Fable 5.2 and
+  the other GPT-6 and Gemini 4 rows were left out, to keep one row per tier.
+  The default reference is Claude Sonnet 5.5.
+- **Prices** come from the providers' own pages on 2026-11-19 (Anthropic's
+  model docs, developers.openai.com pricing, aistudio.google.com pricing), so
+  no entry is marked `verifyPricing`. Cache-read multipliers now follow
+  each model (0.05 on Opus 5.5, Sonnet 5.5, GPT-6.2 and Gemini 4). OpenAI's
+  GPT-6 models charge 1.25× for a 30-minute cache write, unlike GPT-5. Long
+  prompts cost more on Haiku 5.5 (>100K) and every OpenAI model (>272K);
+  each entry's note says so. Gemini 4 Carbon and Gemini 3.8 Flash ship at
+  their introductory price with the scheduled rise in the note; the weekly
+  sync picks up the rise from the public list.
+- **Not verified, carried over**: cache minimums for OpenAI (1024) and Google
+  (2048) are not published for these models. Anthropic's are 512.
+- **OpenAI tokenizer**: OpenAI has not said which encoding GPT-6 uses, and
+  tiktoken has no GPT-6 mapping yet (openai/tiktoken#608). An independent
+  benchmark (williamliu-ai/token-count-compare, 2026-10-12 run) measured
+  OpenAI's own free input-token count endpoint over 31 fixtures. GPT-6
+  Astra, Sol and Luna gave exactly the GPT-5.5 count on every fixture. That
+  is strong evidence that the o200k-equivalent band (0.98–1.02) still holds,
+  so it is unchanged. GPT-6.1 and 6.2 were not in that run; re-check with
+  `eval:live`-style counting before narrowing any claim.
+- **Retired**: the seven previous models move to `retired`, each with a
+  successor of the same role. Gemini 2.5 Pro and Flash map to Gemini 3.8 Flash,
+  matching where Google routes their traffic from 2026-12-01. The share-link
+  note now says the model "left this tool's model list" on that date, because
+  most were superseded, not shut down.
+- **Retiring models**: `recommendable()` in `card.ts` drops any model with a
+  `retiresOn`, on any date, from "start here", the step-ups, a verified pick
+  and the cheaper-tier lint finding (via `cheapestUsable`). They stay in the
+  table and on the card, flagged, and the receipt list now tags them too. When
+  a cheaper model is skipped, the reason says so, so "cheapest" never
+  contradicts the table. If every usable model is retiring they are used
+  rather than nothing.
+- **Sync**: a max output above half the context window goes to "needs a
+  decision" instead of being applied. The public list reports 943,718 for
+  Gemini 4, where Google documents 64K. The list also shows Gemini 3.8 Flash
+  10% above Google's price ($0.825 vs $0.75). The sync will keep proposing
+  that until a person declines it. It is left visible on purpose, not
+  special-cased.
+- **Tests** pick models by provider and tier (`tests/models.ts`), so the next
+  lineup change does not touch them.
+
+Found while checking, not changed here: the same benchmark measures current
+Claude models at about 1.54× the GPT count on its corpus, above the Anthropic
+band's 1.30 high (D2). That band needs its own calibration pass.

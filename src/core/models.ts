@@ -13,7 +13,7 @@ import registryJson from "./models.json";
  *   context window, max output, pricesAsOf, verifyPricing, retiresOn.
  *
  * Bundled prices are a dated snapshot. They are official provider prices as
- * of 2026-09-01 unless `verifyPricing` is set, which marks a value that came
+ * of each entry's `pricesAsOf` unless `verifyPricing` is set, which marks a value that came
  * from the public OpenRouter list and has not yet been checked against the
  * provider's own table.
  *
@@ -141,7 +141,7 @@ export function resolveModelId(
     const successor = registry.models.find((m) => m.id === retired.successorId)!;
     return {
       id: successor.id,
-      note: `This link was made for ${retired.displayName}, which retired on ${retired.retiredOn}. It now compares against ${successor.displayName}.`,
+      note: `This link was made for ${retired.displayName}, which left this tool's model list on ${retired.retiredOn}. It now compares against ${successor.displayName}.`,
     };
   }
   if (typeof id === "string" && id !== "") {

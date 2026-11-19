@@ -3,7 +3,9 @@ import type { Band, LintAction, LintFinding, ModelEstimate } from "../core/types
 import type { Recommendation } from "../core/card";
 import { BREAKDOWN_LABELS, fmtBand, fmtUSD } from "../core/card";
 import { VerifyBadge } from "./Badge";
-import { modelCountWord } from "../core/models";
+import { modelCountWord, retirementNote } from "../core/models";
+
+const TODAY = new Date().toISOString().slice(0, 10);
 
 function usePrefersReducedMotion() {
   const [reduce, setReduce] = useState(
@@ -252,6 +254,9 @@ export function Receipt({
                     {e.model.displayName}
                     {tag && <em className={`tag${tag === "start here" ? " accent" : ""}`}>{tag}</em>}
                     {e.exceedsContext && <em className="tag bad">too long for this model</em>}
+                    {e.model.retiresOn && (
+                      <em className="tag bad">{retirementNote(e.model, TODAY)}</em>
+                    )}
                   </span>
                   <span className="dc-model-cost num">{fmtUSD(e.costPerMonth.point)}</span>
                   <div className="dc-model-bar" aria-hidden="true">

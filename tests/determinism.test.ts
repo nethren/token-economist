@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { estimateAll, estimateModel } from "../src/core/estimate";
 import { lintPrompt } from "../src/core/lint";
 import { renderCard, recommend } from "../src/core/card";
-import { MODELS, getModel } from "../src/core/models";
+import { MODELS } from "../src/core/models";
 import { DEFAULT_ASSUMPTIONS } from "../src/core/types";
 import { BLOATED_PROMPT } from "./fixtures";
+import { REFERENCE, pick } from "./models";
 
 /**
  * §7 "Determinism honoured": the cost + lint + card path makes ZERO calls to
@@ -34,7 +35,7 @@ describe("zero network on the free path", () => {
   it("estimate + lint + card complete with network disabled", () => {
     const a = { ...DEFAULT_ASSUMPTIONS, requestsPerMonth: 50_000 };
     const estimates = estimateAll(BLOATED_PROMPT, a, MODELS);
-    const findings = lintPrompt(BLOATED_PROMPT, a, getModel("claude-sonnet-5"));
+    const findings = lintPrompt(BLOATED_PROMPT, a, REFERENCE);
     const rec = recommend(estimates, [], "fp");
     const card = renderCard({
       featureName: "Ticket classifier",
@@ -71,7 +72,7 @@ describe("determinism", () => {
         prompt: BLOATED_PROMPT,
         estimates,
         assumptions: a,
-        findings: lintPrompt(BLOATED_PROMPT, a, getModel("claude-sonnet-5")),
+        findings: lintPrompt(BLOATED_PROMPT, a, REFERENCE),
         runs: [],
         recommendation: recommend(estimates, [], "fp"),
         currentFingerprint: "fp",
@@ -83,11 +84,11 @@ describe("determinism", () => {
 
   it("lint findings are stable across runs", () => {
     const a = DEFAULT_ASSUMPTIONS;
-    const f1 = lintPrompt(BLOATED_PROMPT, a, getModel("claude-sonnet-5")).map((f) => ({
+    const f1 = lintPrompt(BLOATED_PROMPT, a, REFERENCE).map((f) => ({
       ...f,
       apply: undefined,
     }));
-    const f2 = lintPrompt(BLOATED_PROMPT, a, getModel("claude-sonnet-5")).map((f) => ({
+    const f2 = lintPrompt(BLOATED_PROMPT, a, REFERENCE).map((f) => ({
       ...f,
       apply: undefined,
     }));
@@ -96,7 +97,7 @@ describe("determinism", () => {
 });
 
 describe("estimator math sanity", () => {
-  const model = getModel("claude-haiku-4-5");
+  const model = pick("anthropic", "economy");
 
   it("bands are ordered low ≤ point ≤ high everywhere", () => {
     for (const e of estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, MODELS)) {
@@ -125,18 +126,21 @@ describe("estimator math sanity", () => {
   });
 
   it("caching reduces cost for a large prefix at high volume", () => {
-    // Sonnet 5's cache minimum is 1024 tokens; the fixture prompt (~2.6K
-    // calibrated) engages it. On Haiku (4096 min) it must NOT engage.
+    // The fixture prompt (~2.6K calibrated) clears the reference model's
+    // cache minimum, so caching engages. Raise the minimum above the prompt
+    // and it must NOT engage, and say why.
     const a = { ...DEFAULT_ASSUMPTIONS, requestsPerMonth: 100_000 };
-    const sonnet = getModel("claude-sonnet-5");
-    const off = estimateModel(BLOATED_PROMPT, a, sonnet);
-    const on = estimateModel(BLOATED_PROMPT, { ...a, useCaching: true }, sonnet);
+    const ref = REFERENCE;
+    expect(ref.cacheMinTokens).toBeLessThan(2_000);
+    const off = estimateModel(BLOATED_PROMPT, a, ref);
+    const on = estimateModel(BLOATED_PROMPT, { ...a, useCaching: true }, ref);
     expect(on.costPerMonth.point).toBeLessThan(off.costPerMonth.point);
 
-    const haikuOff = estimateModel(BLOATED_PROMPT, a, model);
-    const haikuOn = estimateModel(BLOATED_PROMPT, { ...a, useCaching: true }, model);
-    expect(haikuOn.costPerMonth.point).toBe(haikuOff.costPerMonth.point);
-    expect(haikuOn.assumptionNotes.join(" ")).toContain("cache minimum");
+    const highMin = { ...model, cacheMinTokens: 100_000 };
+    const minOff = estimateModel(BLOATED_PROMPT, a, highMin);
+    const minOn = estimateModel(BLOATED_PROMPT, { ...a, useCaching: true }, highMin);
+    expect(minOn.costPerMonth.point).toBe(minOff.costPerMonth.point);
+    expect(minOn.assumptionNotes.join(" ")).toContain("cache minimum");
   });
 
   it("batch API halves the bill", () => {

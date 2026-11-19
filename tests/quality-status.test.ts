@@ -3,7 +3,7 @@ import { PASS_THRESHOLD, recommend, renderCard, summarizeRun } from "../src/core
 import { runFingerprint } from "../src/core/measure";
 import { isSimpleTask } from "../src/core/lint";
 import { estimateAll } from "../src/core/estimate";
-import { MODELS, getModel } from "../src/core/models";
+import { MODELS } from "../src/core/models";
 import { DEFAULT_ASSUMPTIONS, type MeasureRun, type QualityCheck } from "../src/core/types";
 import { BLOATED_PROMPT } from "./fixtures";
 
@@ -42,7 +42,8 @@ const run = (
 });
 
 const estimates = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, MODELS);
-const cheap = getModel("gpt-5-mini");
+// The lowest-cost model under these assumptions, whichever it is this lineup.
+const cheap = [...estimates].sort((a, b) => a.costPerMonth.point - b.costPerMonth.point)[0].model;
 
 describe("TE-01 — quality status accounting", () => {
   it("counts total, reviewed, passed, failed and unreviewed separately", () => {

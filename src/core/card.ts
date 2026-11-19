@@ -74,11 +74,25 @@ export interface Recommendation {
   stepUp: ModelEstimate | null;
 }
 
+/**
+ * The models the tool may recommend: those that fit the request, minus any
+ * the provider has announced for retirement (`retiresOn`, on any date — a
+ * feature designed today should not start on a model that is going away).
+ * Retiring models stay in the table and on the card, flagged; they are only
+ * kept out of "start here" and the step-ups. If every usable model is
+ * retiring, they are all that is left, so they are used rather than nothing.
+ */
+export function recommendable(estimates: ModelEstimate[]): ModelEstimate[] {
+  const usable = estimates.filter((e) => !e.exceedsContext);
+  const current = usable.filter((e) => e.model.retiresOn === undefined);
+  return current.length > 0 ? current : usable;
+}
+
 /** The single source of truth for "cheapest model worth starting with" —
  *  used by both the headline recommendation and the linter's cheaper-tier
  *  finding so the tool never gives two different "cheap model" answers. */
 export function cheapestUsable(estimates: ModelEstimate[]): ModelEstimate | null {
-  const usable = estimates.filter((e) => !e.exceedsContext);
+  const usable = recommendable(estimates);
   if (usable.length === 0) return null;
   return usable.reduce((a, b) => (b.costPerMonth.point < a.costPerMonth.point ? b : a));
 }
@@ -198,7 +212,7 @@ export function recommend(
   runs: MeasureRun[],
   currentFingerprint: string,
 ): Recommendation | null {
-  const usable = estimates.filter((e) => !e.exceedsContext);
+  const usable = recommendable(estimates);
   if (usable.length === 0) return null;
   const byCost = [...usable].sort((x, y) => x.costPerMonth.point - y.costPerMonth.point);
   const shortlist = buildShortlist(byCost);
@@ -288,10 +302,21 @@ export function recommend(
   }
 
   const cheapest = byCost[0];
+  // Say so when a cheaper model was left out for retiring, so "cheapest" is
+  // never contradicted by the table right below it.
+  const passedOver = estimates
+    .filter((e) => !e.exceedsContext && e.model.retiresOn !== undefined)
+    .filter((e) => e.costPerMonth.point < cheapest.costPerMonth.point)
+    .map((e) => e.model.displayName);
+  const scope = passedOver.length > 0 ? ", among models not being retired" : "";
+  const passedOverPhrase =
+    passedOver.length === 0
+      ? ""
+      : ` ${passedOver.join(" and ")} ${passedOver.length === 1 ? "costs" : "cost"} less but ${passedOver.length === 1 ? "is" : "are"} being retired.`;
   return {
     estimate: cheapest,
     reason:
-      `Lowest estimated cost to test: ${cheapest.model.displayName} is the cheapest of the models shown under these assumptions. Quality has not been tested.` +
+      `Lowest estimated cost to test: ${cheapest.model.displayName} is the cheapest of the models shown under these assumptions${scope}.${passedOverPhrase} Quality has not been tested.` +
       stepUpPhrase,
     verified: false,
     status: null,

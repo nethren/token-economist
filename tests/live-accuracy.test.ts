@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { calibrated, countBaseTokens } from "../src/core/tokenizer";
 import { getModel } from "../src/core/models";
 import { BLOATED_PROMPT, TOKEN_FIXTURES } from "./fixtures";
+import { pick } from "./models";
 
 /**
  * OPT-IN live accuracy eval (§7 "Cost accuracy" against the provider's own
@@ -14,7 +15,7 @@ import { BLOATED_PROMPT, TOKEN_FIXTURES } from "./fixtures";
  */
 
 const KEY = process.env.ANTHROPIC_API_KEY;
-const MODEL_ID = "claude-haiku-4-5";
+const MODEL_ID = pick("anthropic", "economy").id;
 
 async function providerCount(text: string): Promise<number> {
   const res = await fetch("https://api.anthropic.com/v1/messages/count_tokens", {
