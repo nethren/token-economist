@@ -984,3 +984,46 @@ OpenAI tokenizer question to be settled.
 Found while checking, not changed here: the same benchmark measures current
 Claude models at about 1.54× the GPT count on its corpus, above the Anthropic
 band's 1.30 high (D2). That band needs its own calibration pass.
+
+## 2026-11-19 — D36: Anthropic calibration band moves to 1.30 / 1.55 / 1.85
+
+D2 set the Anthropic band to 1.15 [1.05, 1.30] from mid-2026 guidance that
+o200k undercounts Claude by about 15–20% on prose. That predates the
+tokenizer Anthropic introduced with Opus 4.7, which every curated Claude
+model now uses (Opus 5.5 measured; Sonnet 5.5 and Haiku 5.5 are documented
+as the newer, ~30%-more tokenizer). While checking the OpenAI tokenizer for
+D35, an independent benchmark showed the band was badly low.
+
+- **Evidence**: williamliu-ai/token-count-compare, 2026-10-12 run. It sends
+  31 real-world texts (prose, code in 11 languages, JSON, Markdown, logs,
+  diffs, SQL, stack traces, CJK) to Anthropic's free `count_tokens` endpoint.
+  This app's own o200k count of the same files matched tiktoken on every one,
+  so the ratio is exactly what the band multiplies. With the 7-token message
+  wrapper removed (as `tests/live-accuracy.test.ts` does) and the one
+  61-token probe left out, Claude Opus 5.5 counts 1.345–1.801x o200k:
+  median 1.564, corpus-weighted 1.545. The lowest is CJK and the highest SQL.
+  Opus 4.6, on the old tokenizer, was 1.21x, close to the old band. So the
+  band was right for its time, and the tokenizer moved.
+- **New band**: point 1.55, low 1.30, high 1.85. The range contains every
+  measured text with margin. The point is within EVAL.md's ±12% on 27 of 30
+  texts. The three outside are CJK (1.35, overestimated by 15%), SQL (1.80)
+  and a short PDF-text blob (1.79), both underestimated by about 14%. A
+  single multiplier can't fit all of them (the ±12% windows don't overlap),
+  so the band, not the point, carries those cases. The ±12% threshold is
+  unchanged.
+- **Effect**: the band multiplies only the pasted prompt's o200k count. User
+  input, tool tokens and replies are entered as tokens and are not scaled.
+  So a Claude prompt's token count rises by about 35% (1.55 / 1.15), and the
+  monthly cost rises by the prompt's share of it. On the support-chatbot
+  example, Claude Sonnet 5.5 goes from $203 to $214 a month and Opus 5.5
+  from $406 to $428. Prompt-heavy features move more, and that can change
+  which model is "start here". That is intended: the old numbers undercounted.
+- **Guard**: `tests/tokenizer.test.ts` pins the measured range and checks
+  the band against it offline, so a later edit can't drift away from the
+  evidence unnoticed.
+- **Not done**: `npm run eval:live` was not run (no authorization or key).
+  Its fixtures are short, and on 10–30-token texts ±12% is a token or two,
+  so expect noise there. The benchmark has no Sonnet 5.5 or Haiku 5.5 rows.
+  If either differs from Opus 5.5, the band is per provider and would need
+  per-model calibration, which this registry doesn't support yet. The Google
+  band (D2) is still unverified.

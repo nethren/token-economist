@@ -17,12 +17,15 @@ import registryJson from "./models.json";
  * from the public OpenRouter list and has not yet been checked against the
  * provider's own table.
  *
- * Calibration bands: see DECISIONS.md D2. The offline tokenizer is o200k
- * (OpenAI BPE); other providers' counts are estimated via the band. A band
- * belongs to a provider, so a new model inherits its provider's band.
+ * Calibration bands: see DECISIONS.md D2 (method) and D36 (Anthropic values).
+ * The offline tokenizer is o200k (OpenAI BPE); other providers' counts are
+ * estimated via the band. A band belongs to a provider, so a new model
+ * inherits its provider's band.
  */
 export const CALIBRATION: Record<Provider, Band> = {
-  anthropic: { low: 1.05, point: 1.15, high: 1.3 },
+  // Claude's current tokenizer (since Opus 4.7) counts ~1.35–1.80x o200k,
+  // median ~1.56, on Anthropic's own count endpoint over 30 real-world texts.
+  anthropic: { low: 1.3, point: 1.55, high: 1.85 },
   openai: { low: 0.98, point: 1.0, high: 1.02 },
   google: { low: 0.95, point: 1.05, high: 1.2 },
 };
