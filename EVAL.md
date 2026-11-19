@@ -40,8 +40,8 @@ monotonicity.
 
 ## What the eval deliberately does NOT claim
 
-- Anthropic/Google token counts are **estimates** (calibration bands 1.05–1.30
-  and 0.95–1.20 over the o200k base count). The tool never displays them as
+- Anthropic/Google token counts are **estimates** (calibration bands 1.30–1.85
+  and 0.95–1.20 over the o200k base count; Anthropic values from D36). The tool never displays them as
   exact — every cost is a range. Exactness is only claimed for OpenAI o200k
   models.
 - Quality is never scored by the tool's own opinion. The Quality Lab reports

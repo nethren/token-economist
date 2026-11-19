@@ -46,6 +46,21 @@ describe("offline tokenizer", () => {
     expect(b.low).toBeGreaterThanOrEqual(1000);
   });
 
+  it("the Anthropic band covers the measured Claude/o200k ratios (D36)", () => {
+    // Anthropic's own count_tokens over 30 real-world texts (prose, code in 11
+    // languages, JSON, logs, diffs, SQL, CJK), minus the 7-token message
+    // wrapper, divided by this app's o200k count of the same text. Source:
+    // williamliu-ai/token-count-compare, 2026-10-12 run, claude-opus-5-5.
+    const MEASURED = { min: 1.345, median: 1.564, max: 1.801, corpus: 1.545 };
+    const c = pick("anthropic", "economy").calibration;
+    expect(c.low).toBeLessThanOrEqual(MEASURED.min);
+    expect(c.high).toBeGreaterThanOrEqual(MEASURED.max);
+    // The point holds EVAL.md's ±12% on the typical text and the corpus as a whole.
+    for (const r of [MEASURED.median, MEASURED.corpus]) {
+      expect(Math.abs(c.point - r) / r).toBeLessThanOrEqual(0.12);
+    }
+  });
+
   it("words→tokens helper is a documented 0.75 words/token", () => {
     expect(tokensFromWords(75)).toBe(100);
   });
