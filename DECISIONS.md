@@ -1051,3 +1051,29 @@ what D36 left open: do Sonnet 5.5 and Haiku 5.5 share Opus 5.5's ratio?
   a decision to take on real results.
 - **Not run against Anthropic**: the check was exercised only with stubbed
   replies and networking blocked. It is still unverified against the API.
+
+## 2026-11-22 — D38: First live run: the band holds, the ±12% point claim does not
+
+The owner ran the D37 check against Anthropic's `count_tokens` with their own
+key. Opus 5.5, Sonnet 5.5 and Haiku 5.5 returned the same count, to the token,
+on every text:
+
+| Text | o200k | Claude (less 7-token wrapper) | Ratio | In band | Point error |
+|---|---|---|---|---|---|
+| prose | 308 | 446 | 1.448 | yes | +7.2% |
+| code | 353 | 611 | 1.731 | yes | -10.3% |
+| JSON | 446 | 617 | 1.383 | yes | **+12.2%** |
+| CJK | 311 | 489 | 1.572 | yes | -1.2% |
+| SQL | 372 | 667 | 1.793 | yes | **-13.5%** |
+| bloated prompt | 2,299 | 3,273 | 1.424 | yes | +8.9% |
+
+- **One band per provider holds** for the three curated models. This closes
+  the Sonnet 5.5 and Haiku 5.5 gap left open in D36.
+- **The band stands**: 18 of 18 inside 1.30-1.85.
+- **The point target is missed** on 6 of 18 (JSON and SQL on each model).
+  Retuning can't fix it: SQL needs a multiplier of at least 1.578 and JSON at
+  most 1.549. The point stays 1.55 and the threshold stays 12%.
+- **D37's prediction was half wrong**: it expected CJK and SQL to miss. This
+  CJK text (Chinese, Japanese and Korean) is within 1.2%. JSON misses instead.
+- **Left to the owner**: narrow EVAL.md's headline to what was measured, or
+  calibrate by content type. Until then EVAL.md reports the miss beside it.
