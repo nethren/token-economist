@@ -20,7 +20,8 @@ the browser to mishandle.
 None required. `npm install && npm run dev` gives the complete product.
 
 Set `ANTHROPIC_API_KEY` in your shell only when you deliberately want to run the
-calibration check. `.env.local` and the broader `.env.*` family stay ignored;
+calibration check, and only for that command (`EVAL.md` has one that prompts
+for it): `npm test` also runs the live check when it finds the key. `.env.local` and the broader `.env.*` family stay ignored;
 `.env.example` remains tracked as documentation.
 
 ## Pre-publication checklist

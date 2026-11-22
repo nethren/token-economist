@@ -26,7 +26,7 @@ BPE data), so the ±12% band is the *worst case* across providers.
 | **Determinism honoured** — zero calls to priced models on the cost+lint path | `tests/determinism.test.ts` replaces `fetch` and `XMLHttpRequest` with throwing landmines, then runs estimate → lint → recommend → card | ✅ passes, 0 network calls |
 | **Cost accuracy (repeatability)** — same input ⇒ same estimate | deep-equal estimates, byte-identical cost card across runs | ✅ passes |
 | **Cost accuracy (reference counts)** — token counts match pinned o200k reference vectors | `tests/tokenizer.test.ts`, 6 fixtures incl. unicode/code/JSON | ✅ exact match |
-| **Cost accuracy (provider truth)** — calibrated band contains Anthropic's own `count_tokens` result; point within ±12% | `tests/live-accuracy.test.ts` (opt-in: set `ANTHROPIC_API_KEY`, run `npm run eval:live`) | ⏭ skipped by default — sends fixture texts (never user data) to the free count_tokens endpoint |
+| **Cost accuracy (provider truth)** — calibrated band contains Anthropic's own `count_tokens` result; point within ±12% | `tests/live-accuracy.test.ts`, every Claude model in the registry × six texts of 200+ tokens (opt-in: set `ANTHROPIC_API_KEY`, run `npm run eval:live`) | ⏭ skipped by default — sends fixture texts (never user data) to the free count_tokens endpoint |
 | **Suggestion usefulness** — top suggestions on a deliberately bloated prompt produce a real, re-measured reduction ≥15% | `tests/lint.test.ts` applies the machine-applicable fixes and re-tokenizes | ✅ **87.6% measured reduction** (2,299 → 284 tokens); all 7 planted problem classes detected |
 | **Suggestion honesty** — claimed savings within ±25% of measured | same file | ✅ passes |
 | **Suggestion coverage (prose dumps)** — realistic RAG prompts (Q&A/FAQ paragraphs, not bullets/JSON) trigger the retrieval finding, and the applied fix removes >70% of the prompt, measured | `tests/lint.test.ts`, `FAQ_DUMP_PROMPT` fixture (added after a PM-persona test exposed the gap) | ✅ passes |
@@ -44,6 +44,10 @@ monotonicity.
   and 0.95–1.20 over the o200k base count; Anthropic values from D36). The tool never displays them as
   exact — every cost is a range. Exactness is only claimed for OpenAI o200k
   models.
+- One multiplier per provider does not put every content type within ±12%.
+  The benchmark behind D36 had CJK at about 15% over and SQL about 14% under,
+  both inside the band. The live check keeps both texts, so expect those point
+  checks to fail until calibration is finer-grained (D37).
 - Quality is never scored by the tool's own opinion. The Quality Lab reports
   pass/fail against the *user's* check, per example.
 - Thresholds were set before results were measured (±12% point accuracy,
@@ -55,5 +59,21 @@ monotonicity.
 
 ```sh
 npm run eval        # offline suite — must pass with networking disabled
-ANTHROPIC_API_KEY=… npm run eval:live   # opt-in provider-truth check
 ```
+
+The opt-in provider-truth check, in zsh. It prompts for the key, so the key
+stays out of shell history, and the subshell keeps it from reaching a later
+`npm test`, which would also run the live check if it saw the key:
+
+```sh
+(read -rs "ANTHROPIC_API_KEY?Anthropic API key: " && export ANTHROPIC_API_KEY && npm run eval:live)
+```
+
+It makes one request per Claude model per text and ends with a table:
+
+- `band` is `OUT`: the band is wrong for that model or content type.
+- `point error` over 12% with the band `ok`: one multiplier can't fit that
+  content type. Expected for CJK and SQL (D37).
+- The ratio differs between models on the same text: one band per provider
+  no longer holds, and calibration has to move to per model.
+- Every test is skipped: no key was read, so nothing was checked.

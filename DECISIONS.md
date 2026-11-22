@@ -1027,3 +1027,27 @@ D35, an independent benchmark showed the band was badly low.
   If either differs from Opus 5.5, the band is per provider and would need
   per-model calibration, which this registry doesn't support yet. The Google
   band (D2) is still unverified.
+
+## 2026-11-22 — D37: The live check covers every Claude model, on longer texts
+
+The live check from D2 counted on one model (the economy Claude) using the
+short tokenizer vectors, where ±12% is a token or two. It could not answer
+what D36 left open: do Sonnet 5.5 and Haiku 5.5 share Opus 5.5's ratio?
+
+- **Models**: every `anthropic` entry in the registry, so a lineup change is
+  covered without editing the test.
+- **Texts**: original prose, code, JSON, CJK and SQL of at least 200 o200k
+  tokens (`tests/liveFixtures.ts`, length enforced offline), plus the existing
+  bloated prompt. The short vectors still pin the offline tokenizer. They no
+  longer go to the live check.
+- **Criteria unchanged**: band containment with its existing 2% tolerance,
+  and point within ±12%. They are now two tests sharing one request, so a
+  wrong band reads differently from a point miss. Both still fail the run.
+  A closing table gives the ratio per model and text.
+- **Known misses kept**: at the ratios measured for D36, CJK and SQL fail the
+  ±12% point check and pass the band. They stay in and are not marked as
+  expected failures: removing them would make the eval green by choosing
+  its inputs. Finer calibration, or a narrower headline claim in EVAL.md, is
+  a decision to take on real results.
+- **Not run against Anthropic**: the check was exercised only with stubbed
+  replies and networking blocked. It is still unverified against the API.

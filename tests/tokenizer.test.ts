@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { countBaseTokens, calibrated, tokensFromWords } from "../src/core/tokenizer";
 import { TOKEN_FIXTURES } from "./fixtures";
+import { LIVE_FIXTURES } from "./liveFixtures";
 import { pick } from "./models";
 
 /**
@@ -27,6 +28,12 @@ describe("offline tokenizer", () => {
   it("matches pinned reference counts exactly", () => {
     for (const f of TOKEN_FIXTURES) {
       expect(countBaseTokens(f.text), f.name).toBe(PINNED[f.name]);
+    }
+  });
+
+  it("live-check texts are long enough that rounding can't decide ±12% (D37)", () => {
+    for (const f of LIVE_FIXTURES) {
+      expect(countBaseTokens(f.text), f.name).toBeGreaterThanOrEqual(200);
     }
   });
 
