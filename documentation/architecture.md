@@ -36,7 +36,7 @@ recommendation, cost card, share-link codec, and Quality Lab. Nothing is
 disabled in a hosted build, because nothing in the app calls a model provider.
 
 The browser may fetch the fixed public OpenRouter model-list endpoint to
-refresh price inputs. That request carries no prompt or user-entered content.
+check price inputs (D39). That request carries no prompt or user-entered content.
 The hosted HTML also loads Cloudflare Web Analytics from
 `static.cloudflareinsights.com` and sends beacons to `cloudflareinsights.com`.
 No custom events or form-input collection are configured. Estimates and
@@ -60,7 +60,7 @@ card rather than papered over.
 | Boundary | Data crossing | Enforcement |
 |---|---|---|
 | User input → estimator | Prompt and numeric assumptions | Pure local functions; no network dependency |
-| Browser → OpenRouter | No user content; fixed model-list GET | Hard-coded HTTPS URL; numeric price validation; six-hour local cache; reprices bundled models only |
+| Browser → OpenRouter | No user content; fixed model-list GET | Hard-coded HTTPS URL; numeric price validation; six-hour local cache; checks bundled models only, and replaces a price only where the bundled one is stale or unverified (D39) |
 | CI → OpenRouter → PR | No user content; same public GET, weekly | Writes only machine fields of `models.json` (checked); new or gone models are reported, never applied; a person merges |
 | Browser → share link | Feature name, prompt, assumptions, model ID | Explicit copy action; URL-safe JSON in the fragment; tolerant decoder |
 | Browser → check pack | Prompt, samples, check, reply cap, fingerprint | Explicit copy or download action; plain Markdown; leaves the app only when the user moves it |
@@ -79,9 +79,11 @@ there is nothing to authenticate and nothing to leak.
 ## Known risks and assumptions
 
 - The live price source is a third-party aggregator, not an official provider
-  billing endpoint. Values are type-checked and missing values fall back to
-  bundled snapshots, but users must still verify prices before committing
-  budget.
+  billing endpoint, and it can differ from the providers (it lists Gemini 3.8
+  Flash 10% above Google). So it only checks the bundled official prices and
+  is shown beside them; it replaces one only when the bundled price is stale or
+  unverified, and then flags it. Users must still verify prices before
+  committing budget.
 - A copied share link intentionally gives its recipient the prompt embedded
   in the URL fragment. The fragment is not sent in HTTP requests, but it can
   remain in browser history and any place the user pastes it.

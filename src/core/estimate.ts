@@ -60,35 +60,56 @@ function conversationBreakdown(
   const T = a.toolCallsPerTurn * a.tokensPerToolCall;
   const R = a.reasoningTokensPerTurn;
 
-  const inPrice = model.inputPerMTok / 1e6;
-  const outPrice = model.outputPerMTok / 1e6;
   const mult = (1 + a.retryRate) * (a.useBatch ? model.batchMult : 1);
-
-  // Prefix billing: cached vs not.
   const cachingEngages = a.useCaching && P >= model.cacheMinTokens;
-  let prefixCost: number;
-  if (cachingEngages) {
-    const h = a.cacheHitRate;
-    prefixCost = P * N * inPrice * (h * model.cacheReadMult + (1 - h) * model.cacheWriteMult);
-  } else {
-    prefixCost = P * N * inPrice;
+  const prefixRate = cachingEngages
+    ? a.cacheHitRate * model.cacheReadMult + (1 - a.cacheHitRate) * model.cacheWriteMult
+    : 1;
+
+  // Billed turn by turn: a turn whose input crosses the model's long-context
+  // threshold is charged entirely at the higher rate, as providers bill it.
+  let prefix = 0;
+  let userAndHistory = 0;
+  let tools = 0;
+  let output = 0;
+  let reasoning = 0;
+  for (let t = 1; t <= N; t++) {
+    // Fresh user input + re-sent history (visible output only — providers
+    // strip reasoning blocks from later-turn context, so R never re-bills).
+    const history = t * U + (t - 1) * O;
+    const rates = ratesFor(model, P + history + T);
+    prefix += P * rates.inPrice * prefixRate;
+    userAndHistory += history * rates.inPrice;
+    tools += T * rates.inPrice;
+    output += O * rates.outPrice;
+    reasoning += R * rates.outPrice;
   }
 
-  // Fresh user input + re-sent history (visible output only — providers strip
-  // reasoning blocks from later-turn context, so R never re-bills as input).
-  const userAndHistory = (U * ((N * (N + 1)) / 2) + O * ((N * (N - 1)) / 2)) * inPrice;
-  const tools = T * N * inPrice;
-  const output = O * N * outPrice;
-  const reasoning = R * N * outPrice;
-
   const b: CostBreakdown = {
-    prefix: prefixCost * mult,
+    prefix: prefix * mult,
     userAndHistory: userAndHistory * mult,
     tools: tools * mult,
     output: output * mult,
     reasoning: reasoning * mult,
   };
   return { ...b, total: b.prefix + b.userAndHistory + b.tools + b.output + b.reasoning };
+}
+
+/** USD per token for a request with this many input tokens. */
+function ratesFor(model: ModelSpec, inputTokens: number): { inPrice: number; outPrice: number } {
+  const l = model.longContext;
+  const tier = l !== undefined && inputTokens > l.aboveInputTokens ? l : model;
+  return { inPrice: tier.inputPerMTok / 1e6, outPrice: tier.outputPerMTok / 1e6 };
+}
+
+/** Whether any turn of the conversation crosses the long-context threshold. */
+function crossesLongContext(model: ModelSpec, a: ScaleAssumptions, s: Scenario): boolean {
+  const l = model.longContext;
+  if (l === undefined) return false;
+  const N = Math.max(1, a.turnsPerConversation);
+  const lastInput =
+    s.prefixTokens + N * a.avgUserInputTokens + (N - 1) * s.outputTokens + a.toolCallsPerTurn * a.tokensPerToolCall;
+  return lastInput > l.aboveInputTokens;
 }
 
 /** Cost of one conversation in USD for one bound of the band. */
@@ -151,6 +172,12 @@ export function estimateModel(
   if (a.useCaching && promptTokens.point < model.cacheMinTokens) {
     assumptionNotes.push(
       `Prompt (~${promptTokens.point} tokens) is below ${model.displayName}'s ${model.cacheMinTokens}-token cache minimum — caching will not engage.`,
+    );
+  }
+  if (model.longContext && crossesLongContext(model, a, { prefixTokens: promptTokens.point, outputTokens: out.point })) {
+    const l = model.longContext;
+    assumptionNotes.push(
+      `Some requests exceed ${l.aboveInputTokens.toLocaleString("en-US")} input tokens; ${model.displayName} bills those at $${l.inputPerMTok}/$${l.outputPerMTok} per million tokens.`,
     );
   }
   if (a.reasoningTokensPerTurn > 0) {

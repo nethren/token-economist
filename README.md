@@ -110,9 +110,13 @@ always shown, so the conversion stays visible. The estimator then prices the ful
 fixed instructions, user input, conversation history, retrieved data, tools,
 reasoning tokens, caching, retries, and batch discounts.
 
-On load, the app requests a public model price list from OpenRouter. It sends no
-prompt content. If that request fails, the app uses its dated price snapshot
-and tells you which source produced the estimate.
+Prices come from each provider's own pricing page, including announced price
+changes and the higher rate some models charge for long prompts. On load, the
+app also requests a public model price list from OpenRouter and checks the
+bundled prices against it: where they differ it keeps the provider's price and
+shows the list's beside it, and it uses the list's price only for a model whose
+bundled price is out of date. The request sends no prompt content. If it fails,
+the app says so and uses the bundled prices.
 
 ## Architecture
 

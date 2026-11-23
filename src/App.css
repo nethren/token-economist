@@ -1022,6 +1022,18 @@ main {
   font-weight: 600;
 }
 
+.dc-caveat {
+  margin-top: 6px;
+  max-width: 62ch;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.dc-caveat a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .dc-reason {
   margin-top: 12px;
   max-width: 60ch;

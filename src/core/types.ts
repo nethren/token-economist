@@ -7,6 +7,12 @@ export interface Band {
 
 export type Provider = "anthropic" | "openai" | "google";
 
+/** USD per 1M tokens, input and output. */
+export interface PriceTier {
+  inputPerMTok: number;
+  outputPerMTok: number;
+}
+
 export interface ModelSpec {
   /** API model id, e.g. "claude-haiku-5-5" */
   id: string;
@@ -38,9 +44,18 @@ export interface ModelSpec {
   pricesAsOf: string;
   /** True when the price was not taken from a same-month official table. */
   verifyPricing?: boolean;
-  /** Where the current prices came from: bundled snapshot (default) or an
-   *  explicit, user-triggered live refresh. */
+  /** Where the current prices came from: the bundled snapshot (default), or
+   *  the public price list because the snapshot was stale (D39). */
   priceSource?: "snapshot" | "live";
+  /** What the public price list said on the last check, when it differs from
+   *  the price in use. Shown beside the price, never silently applied. */
+  listPrice?: PriceTier & { checkedOn: string };
+  /** Official higher rate for a request whose input exceeds a threshold
+   *  (the whole request is billed at it). Applied per turn by the estimator. */
+  longContext?: PriceTier & { aboveInputTokens: number };
+  /** An announced official price change, e.g. the end of an introductory
+   *  price. `pricesOn()` applies it from its date. */
+  scheduledPrice?: PriceTier & { from: string };
   /** This model's slug in the public OpenRouter list, which both the browser
    *  price refresh and the weekly model sync look it up by. */
   openrouterSlug: string;

@@ -214,10 +214,11 @@ describe("retiring models in the table and on the card", () => {
 describe("live price refresh reads each model's own slug", () => {
   it("a renamed slug is followed; nothing is added", () => {
     const models = MODELS.map((m, i) => (i === 0 ? { ...m, openrouterSlug: "vendor/renamed" } : m));
-    const r = applyLivePrices(models, { data: [row("vendor/renamed", 7, 21)] }, "2026-11-18");
+    const r = applyLivePrices(models, { data: [row("vendor/renamed", 7, 21)] }, "2026-11-23");
     expect(r.models).toHaveLength(MODELS.length);
-    expect(r.models[0].inputPerMTok).toBeCloseTo(7, 9);
-    expect(r.updated).toEqual([models[0].displayName]);
+    expect(r.models[0].listPrice?.inputPerMTok).toBeCloseTo(7, 9);
+    expect(r.differs).toEqual([models[0].displayName]);
+    expect(r.models.slice(1).every((m) => m.listPrice === undefined)).toBe(true);
   });
 });
 

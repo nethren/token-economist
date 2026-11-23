@@ -6,12 +6,23 @@ import type {
   QualityCheck,
   ScaleAssumptions,
 } from "./types";
-import { STALE_PRICE_DAYS, priceAgeDays, retirementNote } from "./models";
+import { STALE_PRICE_DAYS, listPriceNote, priceAgeDays, pricingNotes, retirementNote } from "./models";
 
 /**
  * The cost card: a one-screen decision artifact rendered as Markdown so a PM
  * can paste it straight into a ticket, doc, or PR description.
  */
+
+/** Said wherever a total leaves thinking out (D39): every Claude model listed
+ *  thinks by default, and Claude Opus 5.5 cannot turn it off. */
+export const THINKING_EXCLUDED =
+  "Hidden thinking is not included. Many current models, every Claude model listed here among them, think before answering and bill it as output, so real cost can be higher. Set thinking tokens per turn in Usage to include it.";
+
+/** True when the last list check disagreed with the price in use. */
+export function listPriceDiffers(m: ModelEstimate["model"]): boolean {
+  const l = m.listPrice;
+  return l !== undefined && (l.inputPerMTok !== m.inputPerMTok || l.outputPerMTok !== m.outputPerMTok);
+}
 
 export function fmtUSD(n: number): string {
   if (n === 0) return "$0";
@@ -388,6 +399,8 @@ export function renderCard(opts: {
         : e.model.verifyPricing
           ? "verify pricing"
           : "",
+      listPriceNote(e.model) ?? "",
+      ...pricingNotes(e.model, date),
     ]
       .filter(Boolean)
       .join("; ");
@@ -455,15 +468,26 @@ export function renderCard(opts: {
     lines.push(
       `- ${a.reasoningTokensPerTurn.toLocaleString("en-US")} hidden reasoning tokens/turn (thinking model), billed at output price`,
     );
+  } else {
+    lines.push(`- ${THINKING_EXCLUDED}`);
   }
   lines.push(`- Prompt caching ${a.useCaching ? `ON (${(a.cacheHitRate * 100).toFixed(0)}% hit rate)` : "OFF"}; Batch API ${a.useBatch ? "ON" : "OFF"}`);
   lines.push(
     `- Token counts measured offline (o200k BPE) and calibrated per provider — non-OpenAI counts are estimates, which is why costs are ranges`,
   );
-  const live = estimates.filter((e) => e.model.priceSource === "live");
-  if (live.length > 0) {
+  const checked = estimates.filter((e) => e.model.listPrice !== undefined);
+  if (checked.length > 0) {
+    const on = checked[0].model.listPrice!.checkedOn;
+    const differ = checked.filter((e) => listPriceDiffers(e.model) && e.model.priceSource !== "live");
+    const live = checked.filter((e) => e.model.priceSource === "live");
     lines.push(
-      `- Prices for ${live.length} model(s) refreshed from a public price list (openrouter.ai) on ${live[0].model.pricesAsOf} at the user's request`,
+      `- Prices from the providers' pricing pages, checked automatically against a public price list (openrouter.ai) on ${on}` +
+        (differ.length > 0
+          ? `. The list differs for ${differ.map((e) => e.model.displayName).join(", ")}; the provider's price is used`
+          : "") +
+        (live.length > 0
+          ? `. The list's price is used for ${live.map((e) => e.model.displayName).join(", ")}, whose bundled price was out of date`
+          : ""),
     );
   }
   const extraNotes = rec?.estimate.assumptionNotes ?? [];
