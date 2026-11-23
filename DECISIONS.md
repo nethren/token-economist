@@ -1122,3 +1122,28 @@ point at them.
 Not changed: the weekly sync still proposes the list's Gemini 3.8 Flash price
 each week (decline it), and the thinking default is the owner's call if a
 non-zero default is wanted.
+
+## 2026-11-23 — D40: Say up front how current the numbers are
+
+The site checks prices on every visit, tests its Claude token ranges against
+Anthropic's counter, and keeps a reviewed model lineup. Visitors couldn't see
+any of that beyond a grey line under the model list. With D39's fixes in, it
+is accurate enough to state plainly.
+
+- **Under the headline**: a status line reading "Prices checked today" (with
+  the real check date, or "Using providers' published prices" when the list
+  can't be reached), the model count, "Claude token counts tested against
+  Anthropic's own counter", and a "How we check" link. It is driven by the
+  same price-check state as the note under the model list, so it can't claim
+  a check that didn't happen. On a phone the items stack.
+- **"How we check"** in How it works covers prices (provider pages, dated,
+  checked against OpenRouter, provider wins unless stale, announced changes
+  and long-prompt rates), models (a person chooses, a job proposes changes as
+  a reviewed pull request) and token counts (Claude measured and re-tested;
+  Google not yet).
+- **Deliberately not claimed**: "real-time" or "live" pricing, that the list
+  is official, the ±12% figure (D38), that Google's ranges are verified, and
+  a weekly cadence. The weekly job's first scheduled run on 2026-11-23 never
+  started, so its frequency isn't stated until it has run on schedule.
+- **Share image**: re-captured from the current page at the same 1600x1375
+  size, in the light theme. The old one showed the retired seven-model lineup.

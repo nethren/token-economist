@@ -30,7 +30,10 @@ import { decodeShareState, encodeShareState } from "./core/share";
 
 /** The registry as priced today: an announced price change applies from its
  *  date (D39). Everything downstream, including the list check, starts here. */
-const PRICED_MODELS = pricesOn(MODELS, new Date().toISOString().slice(0, 10));
+const TODAY = new Date().toISOString().slice(0, 10);
+const PRICED_MODELS = pricesOn(MODELS, TODAY);
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** State restored from a shared permalink, if the URL carries one. */
 const RESTORED = typeof window !== "undefined" ? decodeShareState(window.location.hash) : null;
@@ -582,6 +585,20 @@ export default function App() {
             range on {modelCountWord()} models, what drives it, and what to cut, before anyone writes code. Your
             prompt never leaves this page.
           </p>
+          <ul className="trust-line" aria-label="How current the numbers are">
+            <li className="trust-status">
+              <span className={`trust-dot ${priceStatus.kind}`} aria-hidden="true" />
+              {priceStatus.kind === "loading" && "Checking prices…"}
+              {priceStatus.kind === "live" &&
+                (priceStatus.fetchedAt === TODAY ? "Prices checked today" : `Prices checked ${priceStatus.fetchedAt}`)}
+              {(priceStatus.kind === "snapshot" || priceStatus.kind === "error") && "Using providers' published prices"}
+            </li>
+            <li>{capitalize(modelCountWord())} current models</li>
+            <li>Claude token counts tested against Anthropic's own counter</li>
+            <li>
+              <a href="#how-we-check">How we check</a>
+            </li>
+          </ul>
           {RESTORED?.referenceNote && <p className="example-note">{RESTORED.referenceNote}</p>}
           {activeExample && !RESTORED && (
             <p className="example-note">
@@ -912,7 +929,28 @@ export default function App() {
             <div>
               <h3>Under the hood</h3>
               <p>Built with React, TypeScript and Vite. An offline tokenizer and deterministic cost model account for conversation history, retries, caching and tools. Vitest checks the calculations and evidence rules. Provider differences and unknown reply lengths appear as ranges.</p>
-              <p>Prompts stay in your browser. The app fetches a public price list, and a dated snapshot works offline. The hosted site uses Cloudflare for traffic and performance analytics. Quality results are self-reported, and share links contain the prompt only when you choose to create one.</p>
+              <p>Prompts stay in your browser. The app downloads a public price list to check prices, and works offline with the prices it ships with. The hosted site uses Cloudflare for traffic and performance analytics. Quality results are self-reported, and share links contain the prompt only when you choose to create one.</p>
+            </div>
+            <div className="how-check" id="how-we-check">
+              <h3>How we check</h3>
+              <p>
+                <strong>Prices.</strong> Each price comes from the provider's own pricing page, dated. On every
+                visit (at most every six hours) the site checks them against OpenRouter's public price list. Where
+                they differ, the provider's price is used and the list's is shown beside it, unless ours is more
+                than 90 days old. Price changes a provider has announced apply on their date, and long prompts are
+                billed at the higher rate some models charge for them.
+              </p>
+              <p>
+                <strong>Models.</strong> A person chooses the lineup. A job compares it with the public model list
+                and proposes new, changed and retiring models as a pull request. Nothing changes until someone
+                reviews and merges it.
+              </p>
+              <p>
+                <strong>Token counts.</strong> Your prompt is counted in your browser. Other providers split text
+                differently, so their costs are ranges. The Claude range was measured against Anthropic's own
+                counter on 30 texts, then re-tested on all three Claude models here: every count fell inside it.
+                Google's range has not been measured yet.
+              </p>
             </div>
           </div>
         </section>
