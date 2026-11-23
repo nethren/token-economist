@@ -264,6 +264,66 @@ main {
   color: var(--ink-soft);
 }
 
+.trust-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 22px;
+  margin-top: 16px;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+.trust-line li {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Spacing, not separators, between items, so a wrapped row never starts
+   with a stray dot. On a phone they stack under the status. */
+@media (max-width: 640px) {
+  .trust-line {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .trust-line li + li {
+    padding-left: 16px;
+  }
+}
+
+.trust-status {
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.trust-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+}
+
+.trust-dot.live {
+  background: var(--good);
+  box-shadow: 0 0 0 3px var(--good-soft);
+}
+
+.trust-dot.snapshot,
+.trust-dot.error {
+  background: var(--warn);
+}
+
+.trust-line a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .example-note {
   display: inline-block;
   margin-top: 20px;
@@ -1683,6 +1743,20 @@ main {
 
 .how-body h3 {
   font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.how-body .how-check {
+  grid-column: 1 / -1;
+  scroll-margin-top: 80px;
+}
+
+.how-check p {
+  max-width: 76ch;
+}
+
+.how-check strong {
+  color: var(--ink);
   font-weight: 600;
 }
 
