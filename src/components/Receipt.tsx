@@ -126,6 +126,7 @@ export function Receipt({
   verdictRef,
   emptyActions,
   priceNote,
+  excludesThinking = false,
   children,
 }: {
   hasPrompt: boolean;
@@ -142,6 +143,9 @@ export function Receipt({
   emptyActions?: ReactNode;
   /** Price source and freshness, shown with the model comparison it applies to. */
   priceNote?: ReactNode;
+  /** The estimate leaves hidden thinking out (0 tokens per turn); said beside
+   *  the total, since current models think by default (D39). */
+  excludesThinking?: boolean;
   /** Actions rendered at the foot of the panel (copy, share). */
   children?: ReactNode;
 }) {
@@ -212,6 +216,12 @@ export function Receipt({
           <span className="num">{requestsPerMonth.toLocaleString("en-US")}</span> conversations at
           about <span className="num">{fmtUSD(rec.costPerConversation.point)}</span> each.
         </p>
+        {excludesThinking && (
+          <p className="dc-caveat">
+            Doesn't include hidden thinking, which many current models bill as output.{" "}
+            <a href="#thinking">Add thinking tokens</a>
+          </p>
+        )}
         <p className="dc-reason">{recommendation.reason}</p>
         {st && st.state !== "passed" && (
           <p className="dc-quality">

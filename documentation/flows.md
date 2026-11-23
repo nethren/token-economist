@@ -20,18 +20,23 @@ Markdown cost card.
 **Deny/failure behavior:** Invalid or incomplete assumptions are normalized or
 called out in notes. No network fallback is allowed on this path.
 
-## 2. Public price refresh
+## 2. Public price check
 
-**Actor:** Browser user; automatic refresh also runs once on application load
+**Actor:** Browser user; the check also runs automatically once on application load
 **Precondition:** The six-hour cache is absent or stale
-**Outcome:** Known model prices are updated in memory and cached locally.
+**Outcome:** Each bundled model's price is checked against the list in memory,
+and the list's figures are cached locally.
 
 1. The browser sends a GET to the fixed OpenRouter model-list endpoint.
 2. The response is mapped only for each bundled model's `openrouterSlug`; it
    never adds a model (the weekly sync PR does that, after review, see `cron.md`).
 3. Input and output prices must be finite positive numbers.
 4. Missing or malformed rows retain the bundled snapshot.
-5. A successful subset is cached in `localStorage` with its fetch time.
+5. A price that agrees is marked checked. One that differs keeps the bundled
+   official price and records the list's beside it, unless the bundled price
+   is older than 90 days or unverified: then the list's price is used and
+   flagged "verify" (D39).
+6. A successful subset is cached in `localStorage` with its fetch time.
 
 **Trust crossing:** Browser → public third-party endpoint.
 **Side effects:** Network GET and local cache write.

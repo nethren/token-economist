@@ -1077,3 +1077,48 @@ on every text:
   CJK text (Chinese, Japanese and Korean) is within 1.2%. JSON misses instead.
 - **Left to the owner**: narrow EVAL.md's headline to what was measured, or
   calibrate by content type. Until then EVAL.md reports the miss beside it.
+
+## 2026-11-23 — D39: Price as billed, and say what the total leaves out
+
+An audit of the live site before highlighting its live data found four ways
+its numbers were wrong. All four are fixed together, since the highlight would
+point at them.
+
+- **Long prompts**: Claude Haiku 5.5 bills a request over 100K input tokens at
+  $0.50/$2.50, and the OpenAI models bill one over 272K at roughly double. The
+  estimator ignored this, so it was up to 5x low on long prompts. Each model
+  now carries an optional curated `longContext` rate, and the estimator bills
+  turn by turn, charging a whole request at the long rate when its input
+  crosses the threshold (exclusive), as providers do. Conversations where only
+  later turns cross are priced per turn. Short prompts are priced exactly as
+  before.
+- **The public list overrode official prices**: the browser check replaced
+  every bundled price with OpenRouter's, which lists Gemini 3.8 Flash 10% above
+  Google ($0.825 vs $0.75), and it marked the result as verified. Now a
+  current official price (90 days old or less, not flagged `verifyPricing`) is
+  kept and the list's figure is shown beside it in the table, the price note
+  and the card. The list's price is used only where the bundled one is stale
+  or unverified, and then flagged "verify". This keeps OpenRouter as a check,
+  not an authority. The request and its privacy rule are unchanged.
+- **Announced price changes**: Gemini 4 Carbon doubles on 2026-12-01 and
+  Gemini 3.8 Flash on 2027-01-01. A curated `scheduledPrice` applies a change
+  from its date (`pricesOn`, date injected), so the bundled price is right on
+  the day without waiting for a sync, and the list check then agrees with it.
+- **Registry notes were never shown**: D35 said each entry's note explained
+  intro prices and surcharges, but nothing rendered `notes`. The table and card
+  now show a model's upcoming price change, its long-prompt rate and any
+  curated note.
+- **Thinking**: estimates default to 0 thinking tokens, but every Claude model
+  listed thinks by default, and Opus 5.5 cannot turn it off. At 500 tokens a
+  turn, four of the five examples cost 1.3–7.6x more. The default stays 0,
+  because the amount depends on the task and the tool can't measure it. But
+  the field moves out of the advanced panel into Usage, the total says
+  "Doesn't include hidden thinking" with a link to it, and the card says so
+  in its assumptions.
+- **Card wording**: the card said prices were refreshed "at the user's
+  request", which has been false since D14 made the check automatic. It now
+  says what was checked, against what, and on which date.
+
+Not changed: the weekly sync still proposes the list's Gemini 3.8 Flash price
+each week (decline it), and the thinking default is the owner's call if a
+non-zero default is wanted.

@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import "./App.css";
-import { MODELS, modelCountWord } from "./core/models";
+import { MODELS, fmtTier, listPriceNote, modelCountWord, pricesOn } from "./core/models";
 import {
   autoLoadPrices,
   fetchLivePrices,
@@ -27,6 +27,10 @@ import { Receipt } from "./components/Receipt";
 import { VerifyBadge } from "./components/Badge";
 import { PRESETS, type FeaturePreset } from "./core/presets";
 import { decodeShareState, encodeShareState } from "./core/share";
+
+/** The registry as priced today: an announced price change applies from its
+ *  date (D39). Everything downstream, including the list check, starts here. */
+const PRICED_MODELS = pricesOn(MODELS, new Date().toISOString().slice(0, 10));
 
 /** State restored from a shared permalink, if the URL carries one. */
 const RESTORED = typeof window !== "undefined" ? decodeShareState(window.location.hash) : null;
@@ -103,6 +107,8 @@ function NumField({
   hint,
   what,
   tip,
+  id,
+  wide = false,
 }: {
   label: string;
   value: number | null;
@@ -112,9 +118,11 @@ function NumField({
   hint?: string;
   what?: string;
   tip?: string;
+  id?: string;
+  wide?: boolean;
 }) {
   return (
-    <label className="field">
+    <label className={wide ? "field wide" : "field"} id={id}>
       <span>
         {label}
         {what && <InfoDot what={what} tip={tip} />}
@@ -210,7 +218,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
-  const [models, setModels] = useState(MODELS);
+  const [models, setModels] = useState(PRICED_MODELS);
   const [theme, setTheme] = useState<Theme>(initialTheme);
   const [toast, setToast] = useState<{ id: number; text: string; undo?: Snapshot } | null>(null);
   const [verdictEl, setVerdictEl] = useState<HTMLDivElement | null>(null);
@@ -219,7 +227,7 @@ export default function App() {
   const [priceStatus, setPriceStatus] = useState<
     | { kind: "loading" }
     | { kind: "snapshot"; note?: string }
-    | { kind: "live"; fetchedAt: string; updated: number; missing: string[]; via: "network" | "cache" }
+    | { kind: "live"; fetchedAt: string; updated: string[]; missing: string[]; via: "network" | "cache" }
     | { kind: "error"; message: string }
   >({ kind: "loading" });
 
@@ -248,21 +256,21 @@ export default function App() {
     setTheme(next);
   };
 
-  // Keep prices current without user action: on load, apply the cached live
-  // prices (≤6h old) or fetch fresh ones; offline falls back to the last
-  // known prices, then the bundled snapshot. Never touches the prompt.
+  // Check prices without user action: on load, check against the cached
+  // public list (≤6h old) or fetch it; offline falls back to the last known
+  // list, then the bundled prices alone. Never touches the prompt.
   useEffect(() => {
     let cancelled = false;
-    autoLoadPrices(MODELS, localStorage).then((r) => {
+    autoLoadPrices(PRICED_MODELS, localStorage).then((r) => {
       if (cancelled) return;
       if (r === null) {
-        setPriceStatus({ kind: "snapshot", note: "couldn't reach the live price list" });
+        setPriceStatus({ kind: "snapshot", note: "couldn't reach the public price list" });
       } else {
         setModels(r.models);
         setPriceStatus({
           kind: "live",
           fetchedAt: r.fetchedAt,
-          updated: r.updated.length,
+          updated: r.updated,
           missing: r.missing,
           via: r.via,
         });
@@ -423,13 +431,13 @@ export default function App() {
   const updatePrices = async () => {
     setPriceStatus({ kind: "loading" });
     try {
-      const r = await fetchLivePrices(MODELS);
+      const r = await fetchLivePrices(PRICED_MODELS);
       rememberPrices(localStorage, r, Date.now());
       setModels(r.models);
       setPriceStatus({
         kind: "live",
         fetchedAt: r.fetchedAt,
-        updated: r.updated.length,
+        updated: r.updated,
         missing: r.missing,
         via: "network",
       });
@@ -494,15 +502,22 @@ export default function App() {
 
   const priceNote = (
     <p className="price-note">
-      {priceStatus.kind === "loading" && "Checking today's prices…"}
+      {priceStatus.kind === "loading" && "Checking prices against a public list…"}
       {priceStatus.kind === "snapshot" &&
-        `Using the bundled price snapshot${priceStatus.note ? ` (${priceStatus.note})` : ""}.`}
+        `Using the providers' published prices${priceStatus.note ? ` (${priceStatus.note})` : ""}.`}
       {priceStatus.kind === "live" && (
         <>
-          Prices from {PRICE_SOURCE_NAME}, checked {priceStatus.fetchedAt}
+          Providers' published prices, checked against {PRICE_SOURCE_NAME} on {priceStatus.fetchedAt}
           {priceStatus.via === "cache" ? " (cached)" : ""}.
-          {priceStatus.missing.length > 0 &&
-            ` Snapshot prices for ${priceStatus.missing.join(", ")}.`}
+          {models
+            .filter((m) => m.priceSource !== "live" && listPriceNote(m) !== null)
+            .map(
+              (m) =>
+                ` ${m.displayName}: the list shows ${fmtTier(m.listPrice!)}, so the provider's ${fmtTier(m)} is used.`,
+            )}
+          {priceStatus.updated.length > 0 &&
+            ` Using the list's price for ${priceStatus.updated.join(", ")}: our copy of the provider's price is out of date.`}
+          {priceStatus.missing.length > 0 && ` Not on the list: ${priceStatus.missing.join(", ")}.`}
         </>
       )}
       {priceStatus.kind === "error" &&
@@ -511,9 +526,9 @@ export default function App() {
         className="link-btn"
         onClick={updatePrices}
         disabled={priceStatus.kind === "loading"}
-        title={`Downloads today's public price list from ${PRICE_SOURCE_NAME}. Your prompt is never sent. The hosted site also uses Cloudflare for traffic and performance analytics.`}
+        title={`Downloads today's public price list from ${PRICE_SOURCE_NAME} and checks the prices against it. Your prompt is never sent. The hosted site also uses Cloudflare for traffic and performance analytics.`}
       >
-        Refresh prices
+        Check again
       </button>
     </p>
   );
@@ -663,6 +678,21 @@ export default function App() {
                   what="How much the model writes back each turn."
                   tip="This drives cost more than anything else. Measure one if you can."
                 />
+                <NumField
+                  id="thinking"
+                  wide
+                  label="Hidden thinking per turn (tokens)"
+                  value={assumptions.reasoningTokensPerTurn}
+                  onChange={(n) => set("reasoningTokensPerTurn", Math.max(0, n ?? 0))}
+                  step={500}
+                  hint={
+                    assumptions.reasoningTokensPerTurn === 0
+                      ? "0 leaves thinking out of the estimate"
+                      : "billed as output, never shown to users"
+                  }
+                  what="Tokens a model spends reasoning before it answers. Billed as output, never shown."
+                  tip="Every Claude model listed thinks by default. A few hundred for simple replies; agents often use 1–5k per turn."
+                />
               </div>
 
               {/* Everything below moves the number less than the four above, and
@@ -673,7 +703,7 @@ export default function App() {
                 open={advancedOpen}
                 onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
               >
-                <summary>Retries, tools, thinking, caching and batch</summary>
+                <summary>Retries, tools, caching and batch</summary>
                 <div className="assume-grid">
                   <NumField
                     label="Reply limit (max_tokens)"
@@ -704,14 +734,6 @@ export default function App() {
                     step={100}
                     what="Text each tool result adds back to the conversation."
                     tip="A lookup is small; a whole document is large. For RAG, model retrieved passages here."
-                  />
-                  <NumField
-                    label="Thinking tokens per turn"
-                    value={assumptions.reasoningTokensPerTurn}
-                    onChange={(n) => set("reasoningTokensPerTurn", Math.max(0, n ?? 0))}
-                    step={500}
-                    what="Hidden tokens a thinking model spends before it answers. Billed as output, never shown."
-                    tip="0 for non-thinking models. Agent workloads often use 1–5k per turn."
                   />
                   <label className="switch wide">
                     <input
@@ -772,6 +794,7 @@ export default function App() {
               onApply={applyFix}
               onAction={applyAction}
               verdictRef={setVerdictEl}
+              excludesThinking={assumptions.reasoningTokensPerTurn === 0}
               emptyActions={exampleButtons}
               priceNote={priceNote}
             >

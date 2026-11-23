@@ -1,4 +1,4 @@
-import type { Band, ModelSpec, Provider, RetiredModel } from "./types";
+import type { Band, ModelSpec, PriceTier, Provider, RetiredModel } from "./types";
 import registryJson from "./models.json";
 
 /**
@@ -7,7 +7,8 @@ import registryJson from "./models.json";
  *
  * Two kinds of field share each entry (DECISIONS.md D34):
  * - Curated by a person: id, provider, displayName, tier, openrouterSlug,
- *   cacheMinTokens, notes, plus `defaultReferenceId` and the `retired` list.
+ *   cacheMinTokens, notes, longContext, scheduledPrice, plus
+ *   `defaultReferenceId` and the `retired` list.
  *   Tier and tokenizer handling change advice, so no script ever writes them.
  * - Refreshed by `npm run models:sync` (a weekly PR): input/output price,
  *   context window, max output, pricesAsOf, verifyPricing, retiresOn.
@@ -70,6 +71,24 @@ export function parseRegistry(raw: unknown): Registry {
     if (entry.retiresOn !== undefined && (typeof entry.retiresOn !== "string" || !ISO_DATE.test(entry.retiresOn))) {
       fail("retiresOn must be yyyy-mm-dd");
     }
+    const tier = (v: unknown, what: string): Record<string, unknown> => {
+      const t = v as Record<string, unknown>;
+      for (const k of ["inputPerMTok", "outputPerMTok"]) {
+        const n = t?.[k];
+        if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) fail(`${what}.${k} must be a positive number`);
+      }
+      return t;
+    };
+    if (entry.longContext !== undefined) {
+      const above = tier(entry.longContext, "longContext").aboveInputTokens;
+      if (typeof above !== "number" || !Number.isInteger(above) || above <= 0) {
+        fail("longContext.aboveInputTokens must be a positive integer");
+      }
+    }
+    if (entry.scheduledPrice !== undefined) {
+      const from = tier(entry.scheduledPrice, "scheduledPrice").from;
+      if (typeof from !== "string" || !ISO_DATE.test(from)) fail("scheduledPrice.from must be yyyy-mm-dd");
+    }
     return {
       ...(entry as unknown as ModelSpec),
       calibration: CALIBRATION[entry.provider as Provider],
@@ -118,6 +137,46 @@ export function priceAgeDays(pricesAsOf: string, onDate: string): number {
   const ms = Date.parse(onDate) - Date.parse(pricesAsOf);
   if (!Number.isFinite(ms)) return 0;
   return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+const usd = (n: number) => `$${Number(n.toFixed(4))}`;
+/** "$0.75/$3.75": input/output USD per 1M tokens, without float noise. */
+export const fmtTier = (t: PriceTier) => `${usd(t.inputPerMTok)}/${usd(t.outputPerMTok)}`;
+
+/**
+ * The registry as priced on a date: an announced price change whose date has
+ * come replaces the bundled price (D39). Pure; callers inject the date.
+ */
+export function pricesOn(models: ModelSpec[], onDate: string): ModelSpec[] {
+  return models.map((m) => {
+    const s = m.scheduledPrice;
+    if (s === undefined || onDate < s.from) return m;
+    const { scheduledPrice: _applied, ...rest } = m;
+    return { ...rest, inputPerMTok: s.inputPerMTok, outputPerMTok: s.outputPerMTok, pricesAsOf: s.from };
+  });
+}
+
+/**
+ * Pricing facts a reader needs beside the per-token price: an announced
+ * change still ahead, the long-prompt rate, and any curated note. Pure.
+ */
+export function pricingNotes(model: ModelSpec, onDate: string): string[] {
+  const notes: string[] = [];
+  const s = model.scheduledPrice;
+  if (s !== undefined && onDate < s.from) notes.push(`${fmtTier(s)} from ${s.from}`);
+  const l = model.longContext;
+  if (l !== undefined) {
+    notes.push(`${fmtTier(l)} when input is over ${Math.round(l.aboveInputTokens / 1000)}K tokens`);
+  }
+  if (model.notes) notes.push(model.notes);
+  return notes;
+}
+
+/** The public list's price, when the last check disagreed with the one in use. */
+export function listPriceNote(model: ModelSpec): string | null {
+  const l = model.listPrice;
+  if (l === undefined || (l.inputPerMTok === model.inputPerMTok && l.outputPerMTok === model.outputPerMTok)) return null;
+  return `public list shows ${fmtTier(l)} (checked ${l.checkedOn})`;
 }
 
 /**

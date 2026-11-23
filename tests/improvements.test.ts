@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { estimateAll, estimateModel } from "../src/core/estimate";
-import { MODELS, priceAgeDays, STALE_PRICE_DAYS } from "../src/core/models";
-import { DEFAULT_ASSUMPTIONS } from "../src/core/types";
-import { fmtBreakdown, recommend, renderCard } from "../src/core/card";
+import { MODELS, listPriceNote, priceAgeDays, STALE_PRICE_DAYS } from "../src/core/models";
+import { DEFAULT_ASSUMPTIONS, type ModelSpec } from "../src/core/types";
+import { fmtBreakdown, listPriceDiffers, recommend, renderCard } from "../src/core/card";
 import { decodeShareState, encodeShareState, type ShareState } from "../src/core/share";
 import {
   applyLivePrices,
@@ -172,63 +172,110 @@ describe("shareable permalink codec", () => {
   });
 });
 
-describe("live price refresh (opt-in; the mapper is pure and offline)", () => {
+describe("price check against the public list (D39; pure and offline)", () => {
   const haikuTier = pick("anthropic", "economy");
   const openaiCheap = pick("openai", "economy");
   const malformed = pick("openai", "frontier");
+  const perToken = (perMTok: number) => String(perMTok / 1e6);
   const payload = {
     data: [
+      // Disagrees with the bundled price.
       { id: haikuTier.openrouterSlug, pricing: { prompt: "0.0000012", completion: "0.000006" } },
-      { id: openaiCheap.openrouterSlug, pricing: { prompt: "0.0000003", completion: "0.0000025" } },
+      // Agrees with it.
+      { id: openaiCheap.openrouterSlug, pricing: { prompt: perToken(openaiCheap.inputPerMTok), completion: perToken(openaiCheap.outputPerMTok) } },
       { id: malformed.openrouterSlug, pricing: { prompt: "not-a-number", completion: "0.00001" } },
     ],
   };
+  const FRESH = "2026-11-23"; // days after the bundled official prices
+  const STALE = "2027-03-01"; // more than STALE_PRICE_DAYS after them
 
-  it("updates matched models, stamps date/source, and leaves the rest on snapshot", () => {
-    const r = applyLivePrices(MODELS, payload, "2026-07-17");
+  it("keeps a current official price and records the list's different figure beside it", () => {
+    const r = applyLivePrices(MODELS, payload, FRESH);
     const haiku = r.models.find((m) => m.id === haikuTier.id)!;
-    expect(haiku.inputPerMTok).toBeCloseTo(1.2, 10);
-    expect(haiku.outputPerMTok).toBeCloseTo(6.0, 10);
-    expect(haiku.pricesAsOf).toBe("2026-07-17");
-    expect(haiku.priceSource).toBe("live");
-    expect(haiku.verifyPricing).toBe(false);
-    // malformed pricing and uncovered models stay untouched
-    const bad = r.models.find((m) => m.id === malformed.id)!;
-    expect(bad.inputPerMTok).toBe(malformed.inputPerMTok);
-    expect(bad.priceSource).toBeUndefined();
-    expect(r.updated).toContain(haikuTier.displayName);
+    expect(haiku.inputPerMTok).toBe(haikuTier.inputPerMTok);
+    expect(haiku.outputPerMTok).toBe(haikuTier.outputPerMTok);
+    expect(haiku.priceSource).toBeUndefined();
+    expect(haiku.listPrice).toMatchObject({ checkedOn: FRESH });
+    expect(haiku.listPrice!.inputPerMTok).toBeCloseTo(1.2, 10);
+    expect(listPriceNote(haiku)).toContain("public list shows $1.2/$6");
+    expect(r.differs).toEqual([haikuTier.displayName]);
+    expect(r.matched).toEqual([openaiCheap.displayName]);
+    expect(r.updated).toEqual([]);
     expect(r.missing).toContain(malformed.displayName);
+    // A match is recorded as checked but says nothing extra.
+    const luna = r.models.find((m) => m.id === openaiCheap.id)!;
+    expect(luna.listPrice?.checkedOn).toBe(FRESH);
+    expect(listPriceNote(luna)).toBeNull();
+  });
+
+  it("uses the list's price where the bundled one is stale or unverified, and flags it", () => {
+    for (const [models, on] of [
+      [MODELS, STALE],
+      [MODELS.map((m) => (m.id === haikuTier.id ? { ...m, verifyPricing: true } : m)), FRESH],
+    ] as const) {
+      const r = applyLivePrices(models, payload, on);
+      const haiku = r.models.find((m) => m.id === haikuTier.id)!;
+      expect(haiku.inputPerMTok).toBeCloseTo(1.2, 10);
+      expect(haiku.outputPerMTok).toBeCloseTo(6.0, 10);
+      expect(haiku.pricesAsOf).toBe(on);
+      expect(haiku.priceSource).toBe("live");
+      expect(haiku.verifyPricing).toBe(true);
+      expect(r.updated).toEqual([haikuTier.displayName]);
+    }
+  });
+
+  it("float noise in the list's per-token strings is not a difference", () => {
+    // OpenRouter lists $0.10/MTok as "0.0000001", and 0.0000001 × 1e6 is
+    // 0.09999999999999999 in floating point. That once flagged a match as a
+    // difference in the UI.
+    const cheap: ModelSpec = { ...openaiCheap, inputPerMTok: 0.1, outputPerMTok: 0.5 };
+    const r = applyLivePrices(
+      [cheap],
+      { data: [{ id: cheap.openrouterSlug, pricing: { prompt: "0.0000001", completion: "0.0000005" } }] },
+      FRESH,
+    );
+    expect(r.matched).toEqual([cheap.displayName]);
+    expect(listPriceNote(r.models[0])).toBeNull();
+    expect(listPriceDiffers(r.models[0])).toBe(false);
   });
 
   it("does not mutate the bundled registry", () => {
     const before = JSON.stringify(MODELS);
-    applyLivePrices(MODELS, payload, "2026-07-17");
+    applyLivePrices(MODELS, payload, FRESH);
     expect(JSON.stringify(MODELS)).toBe(before);
   });
 
   it("tolerates garbage payloads", () => {
     for (const junk of [null, 42, "x", {}, { data: "nope" }, { data: [{ id: 7 }] }]) {
-      const r = applyLivePrices(MODELS, junk, "2026-07-17");
+      const r = applyLivePrices(MODELS, junk, FRESH);
       expect(r.models).toEqual(MODELS);
       expect(r.updated).toEqual([]);
+      expect(r.differs).toEqual([]);
     }
   });
 
-  it("live-priced estimates flag the source on the card", () => {
-    const { models } = applyLivePrices(MODELS, payload, "2026-07-17");
-    const estimates = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, models);
-    const card = renderCard({
-      featureName: "X",
-      prompt: BLOATED_PROMPT,
-      estimates,
-      assumptions: DEFAULT_ASSUMPTIONS,
-      findings: [],
-      runs: [],
-      recommendation: recommend(estimates, [], "fp"),
-      currentFingerprint: "fp",
-      generatedAt: "2026-07-17",
-    });
-    expect(card).toContain("refreshed from a public price list (openrouter.ai) on 2026-07-17");
+  it("the card says how prices were checked, never that a refresh was requested", () => {
+    const card = (models: typeof MODELS, on: string) => {
+      const estimates = estimateAll(BLOATED_PROMPT, DEFAULT_ASSUMPTIONS, models);
+      return renderCard({
+        featureName: "X",
+        prompt: BLOATED_PROMPT,
+        estimates,
+        assumptions: DEFAULT_ASSUMPTIONS,
+        findings: [],
+        runs: [],
+        recommendation: recommend(estimates, [], "fp"),
+        currentFingerprint: "fp",
+        generatedAt: on,
+      });
+    };
+    const fresh = card(applyLivePrices(MODELS, payload, FRESH).models, FRESH);
+    expect(fresh).toContain(`checked automatically against a public price list (openrouter.ai) on ${FRESH}`);
+    expect(fresh).toContain(`The list differs for ${haikuTier.displayName}; the provider's price is used`);
+    expect(fresh).toContain("public list shows $1.2/$6");
+    expect(fresh).not.toContain("at the user's request");
+    const stale = card(applyLivePrices(MODELS, payload, STALE).models, STALE);
+    expect(stale).toContain(`The list's price is used for ${haikuTier.displayName}`);
   });
 });
 
@@ -241,7 +288,9 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
       dump: () => Object.fromEntries(map),
     };
   };
-  const NOW = Date.parse("2026-07-17T12:00:00Z");
+  // Stale enough that the bundled official prices yield to the list (D39), so
+  // these tests can see which source each branch applied.
+  const NOW = Date.parse("2027-03-01T12:00:00Z");
   const goodPayload = {
     data: [{ id: pick("openai", "economy").openrouterSlug, pricing: { prompt: "0.0000004", completion: "0.000003" } }],
   };
@@ -253,7 +302,7 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
       throw new Error("must not fetch on a fresh cache");
     });
     const storage = fakeStorage();
-    const fetched = applyLivePrices(MODELS, goodPayload, "2026-07-17");
+    const fetched = applyLivePrices(MODELS, goodPayload, "2027-03-01");
     rememberPrices(storage, fetched, NOW - PRICE_CACHE_TTL_MS / 2);
     const r = await autoLoadPrices(MODELS, storage, NOW);
     expect(r?.via).toBe("cache");
@@ -268,7 +317,7 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
       return { ok: true, json: async () => goodPayload };
     });
     const storage = fakeStorage();
-    rememberPrices(storage, applyLivePrices(MODELS, goodPayload, "2026-07-01"), NOW - PRICE_CACHE_TTL_MS * 2);
+    rememberPrices(storage, applyLivePrices(MODELS, goodPayload, "2027-02-28"), NOW - PRICE_CACHE_TTL_MS * 2);
     const r = await autoLoadPrices(MODELS, storage, NOW);
     expect(calls).toBe(1);
     expect(r?.via).toBe("network");
@@ -280,7 +329,7 @@ describe("automatic price refresh (cache + TTL + offline fallback)", () => {
       throw new TypeError("Failed to fetch");
     });
     const storage = fakeStorage();
-    rememberPrices(storage, applyLivePrices(MODELS, goodPayload, "2026-07-01"), NOW - PRICE_CACHE_TTL_MS * 10);
+    rememberPrices(storage, applyLivePrices(MODELS, goodPayload, "2027-02-28"), NOW - PRICE_CACHE_TTL_MS * 10);
     const r = await autoLoadPrices(MODELS, storage, NOW);
     expect(r?.via).toBe("cache");
     expect(r?.models.find((m) => m.id === pick("openai", "economy").id)?.priceSource).toBe("live");

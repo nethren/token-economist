@@ -41,9 +41,13 @@
       "tier": "economy",
       "openrouterSlug": "anthropic/claude-haiku-5.5",
       "cacheMinTokens": 512,
-      "notes": "Prices for prompts up to 100K tokens; longer prompts cost $0.50/$2.50 per MTok.",
       "inputPerMTok": 0.1,
       "outputPerMTok": 0.5,
+      "longContext": {
+        "aboveInputTokens": 100000,
+        "inputPerMTok": 0.5,
+        "outputPerMTok": 2.5
+      },
       "cacheReadMult": 0.1,
       "cacheWriteMult": 1.25,
       "batchMult": 0.5,
@@ -58,9 +62,13 @@
       "tier": "frontier",
       "openrouterSlug": "openai/gpt-6.2-astra",
       "cacheMinTokens": 1024,
-      "notes": "Prices for prompts up to 272K tokens; longer prompts cost more.",
       "inputPerMTok": 8,
       "outputPerMTok": 40,
+      "longContext": {
+        "aboveInputTokens": 272000,
+        "inputPerMTok": 16,
+        "outputPerMTok": 60
+      },
       "cacheReadMult": 0.05,
       "cacheWriteMult": 1.25,
       "batchMult": 0.5,
@@ -75,9 +83,13 @@
       "tier": "workhorse",
       "openrouterSlug": "openai/gpt-6.2-sol",
       "cacheMinTokens": 1024,
-      "notes": "Prices for prompts up to 272K tokens; longer prompts cost more.",
       "inputPerMTok": 2,
       "outputPerMTok": 10,
+      "longContext": {
+        "aboveInputTokens": 272000,
+        "inputPerMTok": 4,
+        "outputPerMTok": 15
+      },
       "cacheReadMult": 0.05,
       "cacheWriteMult": 1.25,
       "batchMult": 0.5,
@@ -92,9 +104,13 @@
       "tier": "economy",
       "openrouterSlug": "openai/gpt-6-luna",
       "cacheMinTokens": 1024,
-      "notes": "Prices for prompts up to 272K tokens; longer prompts cost more.",
       "inputPerMTok": 0.1,
       "outputPerMTok": 0.5,
+      "longContext": {
+        "aboveInputTokens": 272000,
+        "inputPerMTok": 0.2,
+        "outputPerMTok": 0.75
+      },
       "cacheReadMult": 0.1,
       "cacheWriteMult": 1.25,
       "batchMult": 0.5,
@@ -109,9 +125,13 @@
       "tier": "frontier",
       "openrouterSlug": "google/gemini-4-carbon",
       "cacheMinTokens": 2048,
-      "notes": "Introductory price through 2026-11-30; $4/$20 per MTok from 2026-12-01.",
       "inputPerMTok": 2,
       "outputPerMTok": 10,
+      "scheduledPrice": {
+        "from": "2026-12-01",
+        "inputPerMTok": 4,
+        "outputPerMTok": 20
+      },
       "cacheReadMult": 0.05,
       "cacheWriteMult": 1,
       "batchMult": 0.5,
@@ -142,9 +162,13 @@
       "tier": "economy",
       "openrouterSlug": "google/gemini-3.8-flash",
       "cacheMinTokens": 2048,
-      "notes": "Introductory price through 2026-12-31; $1.50/$7.50 per MTok from 2027-01-01.",
       "inputPerMTok": 0.75,
       "outputPerMTok": 3.75,
+      "scheduledPrice": {
+        "from": "2027-01-01",
+        "inputPerMTok": 1.5,
+        "outputPerMTok": 7.5
+      },
       "cacheReadMult": 0.1,
       "cacheWriteMult": 1,
       "batchMult": 0.5,

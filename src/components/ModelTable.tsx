@@ -1,7 +1,7 @@
 import type { ModelEstimate, ModelSpec } from "../core/types";
 import type { Recommendation } from "../core/card";
 import { fmtBand, fmtUSD } from "../core/card";
-import { STALE_PRICE_DAYS, priceAgeDays, retirementNote } from "../core/models";
+import { STALE_PRICE_DAYS, listPriceNote, priceAgeDays, pricingNotes, retirementNote } from "../core/models";
 import { BandBar } from "./BandBar";
 import { CostSplit } from "./CostSplit";
 
@@ -10,17 +10,22 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 function PriceNote({ model }: { model: ModelSpec }) {
   const retiring = retirementNote(model, TODAY);
+  const listed = listPriceNote(model);
   return (
     <>
       {retiring && <span className="stalewarn"> · {retiring}</span>}
       <PriceAge model={model} />
+      {listed && <span className="stalewarn"> · {listed}</span>}
+      {pricingNotes(model, TODAY).map((n) => (
+        <span key={n}> · {n}</span>
+      ))}
     </>
   );
 }
 
 function PriceAge({ model }: { model: ModelSpec }) {
   if (model.priceSource === "live") {
-    return <span className="livenote"> · live price {model.pricesAsOf}</span>;
+    return <span className="stalewarn"> · public-list price {model.pricesAsOf}, verify</span>;
   }
   const age = priceAgeDays(model.pricesAsOf, TODAY);
   if (age > STALE_PRICE_DAYS) {
