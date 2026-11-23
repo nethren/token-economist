@@ -162,8 +162,8 @@
       "tier": "economy",
       "openrouterSlug": "google/gemini-3.8-flash",
       "cacheMinTokens": 2048,
-      "inputPerMTok": 0.75,
-      "outputPerMTok": 3.75,
+      "inputPerMTok": 0.825,
+      "outputPerMTok": 4.125,
       "scheduledPrice": {
         "from": "2027-01-01",
         "inputPerMTok": 1.5,
@@ -174,7 +174,8 @@
       "batchMult": 0.5,
       "contextWindow": 1048576,
       "maxOutput": 65536,
-      "pricesAsOf": "2026-11-19"
+      "pricesAsOf": "2026-11-23",
+      "verifyPricing": true
     }
   ],
   "retired": [
