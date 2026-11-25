@@ -36,6 +36,11 @@ jobs:
       - name: Diff the registry against the public model list
         run: node scripts/sync-models.ts --write --report "$RUNNER_TEMP/model-sync.md"
 
+      # Always visible on the run page, so a reported-only difference (an
+      # official price the list disagrees with) is never silent.
+      - name: Show the report in the run summary
+        run: cat "$RUNNER_TEMP/model-sync.md" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Stop when nothing changed
         id: diff
         run: |
@@ -44,6 +49,18 @@ jobs:
             echo "Registry already matches the public list."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A sync PR from an earlier run proposes changes this run no longer
+      # would, so it is closed rather than left to be merged by mistake.
+      - name: Close an out-of-date sync PR
+        if: steps.diff.outputs.changed == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open_pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$open_pr" ]; then
+            gh pr close "$open_pr" --delete-branch --comment "Closed by the $(date -u +%F) sync: the registry now matches what it would propose. See $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID for the report."
           fi
 
       # A PR opened with GITHUB_TOKEN does not trigger ci.yml, so the same

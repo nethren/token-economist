@@ -7,6 +7,7 @@ never changes the deployed app by itself (DECISIONS.md D34).
 
 - **Workflow:** `.github/workflows/model-sync.yml`
 - **Schedule:** Mondays 06:17 UTC, plus manual **Run workflow** (`workflow_dispatch`).
+  GitHub can start scheduled runs hours late: the first ran at 18:21 UTC.
 - **Owner:** the repository owner, who reviews and merges the PR. Vercel deploys
   only from `main`, so nothing ships until the merge.
 
@@ -18,22 +19,33 @@ never changes the deployed app by itself (DECISIONS.md D34).
    `src/core/modelSync.ts`.
 2. Writes only the machine-refreshable fields: input/output price, context
    window, max output, `pricesAsOf`, `verifyPricing`, `retiresOn`, plus the
-   `candidatesSeenThrough` marker. Every changed price is marked
-   `verifyPricing: true` until a person checks it against the provider's own
-   table. `assertOnlyMachineFields()` throws if anything else moved.
+   `candidatesSeenThrough` marker. A price checked against the provider
+   within 90 days (`pricesAsOf`, no `verifyPricing`) is kept even when the
+   list differs; the difference is reported, the same rule the site's own
+   price check follows (DECISIONS.md D39, D41). Only a stale or unverified
+   price takes the list's, and is marked `verifyPricing: true` until a person
+   checks it against the provider's own table. An announced price change
+   whose date has come is what the list is compared with, and is never
+   overwritten. `assertOnlyMachineFields()` throws if anything else moved.
 3. Reports, without applying: new text models from Anthropic, OpenAI and
    Google, each with a suggested entry; curated models that vanished from the
    list; cache or batch multipliers that differ; and a max output above half
    the context window, which the list reports for some models where it is
    really echoing the context size.
-4. If `models.json` changed, runs `npm run check` and force-pushes the branch
+4. Writes the report to the run's summary page every time, so a difference
+   that is only reported is still visible.
+5. If `models.json` changed, runs `npm run check` and force-pushes the branch
    `chore/model-sync`, then opens or updates one PR whose body is the report
-   plus the check outcome. If nothing changed, it exits and opens no PR.
+   plus the check outcome. If nothing changed, it opens no PR and closes any
+   open sync PR from an earlier run, which would propose something this run
+   no longer would.
 
 ## Reviewing the PR
 
 - **Prices:** compare with the official pages linked in the PR body, then
-  clear `verifyPricing` on the rows that match.
+  clear `verifyPricing` on the rows that match. "Official price kept" rows
+  need nothing unless the provider really changed the price; then edit the
+  price and `pricesAsOf` by hand.
 - **New models:** paste the suggested entry into `models` and confirm the tier,
   `cacheMinTokens` and tokenizer handling. A new OpenAI generation needs its
   tokenizer checked against o200k (DECISIONS.md D2). Merging without adding a

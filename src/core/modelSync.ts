@@ -13,10 +13,17 @@
  * new and vanished models are reported with a suggested entry, never added
  * or removed. `syncModels` asserts that boundary on its own output.
  *
+ * Prices follow the same rule as the app's live check (D39, D41): a price
+ * checked against the provider within STALE_PRICE_DAYS is kept, and the
+ * list's different figure is only reported. The list's price is written only
+ * where the bundled one is stale or was never checked (`verifyPricing`).
+ *
  * Pure: (registry, payload, now) in, (next registry, report) out. The only
  * network call is the CLI's single GET of the public list, which carries no
  * user data.
  */
+
+import { STALE_PRICE_DAYS, priceAgeDays } from "./priceAge.ts";
 
 export const SYNC_PROVIDERS = ["anthropic", "openai", "google"] as const;
 
@@ -50,6 +57,8 @@ export interface RawModel {
   verifyPricing?: boolean;
   retiresOn?: string;
   notes?: string;
+  /** Curated: an announced price change (D39). The sync never writes it. */
+  scheduledPrice?: { from: string; inputPerMTok: number; outputPerMTok: number };
 }
 
 export interface RawRegistry {
@@ -86,7 +95,10 @@ export interface SyncResult {
   next: RawRegistry;
   changed: boolean;
   rowsRead: number;
+  /** The list's price was written: the bundled one was stale or unverified. */
   priceChanges: FieldChange[];
+  /** The list differs from a current official price, which was kept. */
+  priceDiffers: FieldChange[];
   limitChanges: FieldChange[];
   retirementChanges: FieldChange[];
   /** Curated models whose slug is no longer in the list. */
@@ -154,6 +166,7 @@ export function syncModels(registry: RawRegistry, payload: unknown, now: Date): 
 
   const next: RawRegistry = structuredClone(registry);
   const priceChanges: FieldChange[] = [];
+  const priceDiffers: FieldChange[] = [];
   const limitChanges: FieldChange[] = [];
   const retirementChanges: FieldChange[] = [];
   const toCheck: FieldChange[] = [];
@@ -170,14 +183,26 @@ export function syncModels(registry: RawRegistry, payload: unknown, now: Date): 
     const pricing = (row.pricing ?? {}) as Row;
     const input = perMTok(pricing.prompt);
     const output = perMTok(pricing.completion);
-    if (input !== null && output !== null && (!near(input, m.inputPerMTok) || !near(output, m.outputPerMTok))) {
-      if (!near(input, m.inputPerMTok)) note(priceChanges, "inputPerMTok", m.inputPerMTok, input);
-      if (!near(output, m.outputPerMTok)) note(priceChanges, "outputPerMTok", m.outputPerMTok, output);
-      m.inputPerMTok = input;
-      m.outputPerMTok = output;
-      m.pricesAsOf = today;
-      // Observed on an aggregator, not read from the provider's own table.
-      m.verifyPricing = true;
+    // Compare with the price the app charges today: an announced change
+    // whose date has come replaces the bundled one (pricesOn in models.ts).
+    const s = m.scheduledPrice;
+    const due = s !== undefined && today >= s.from;
+    const inUse = due ? s : m;
+    if (input !== null && output !== null && (!near(input, inUse.inputPerMTok) || !near(output, inUse.outputPerMTok))) {
+      // A current official price wins over the aggregator (D39, D41). So does
+      // an announced price in effect: it is curated, and the app applies it
+      // over the bundled one, so writing the bundled one would change nothing.
+      const official = due || (!m.verifyPricing && priceAgeDays(m.pricesAsOf, today) <= STALE_PRICE_DAYS);
+      const into = official ? priceDiffers : priceChanges;
+      if (!near(input, inUse.inputPerMTok)) note(into, "inputPerMTok", inUse.inputPerMTok, input);
+      if (!near(output, inUse.outputPerMTok)) note(into, "outputPerMTok", inUse.outputPerMTok, output);
+      if (!official) {
+        m.inputPerMTok = input;
+        m.outputPerMTok = output;
+        m.pricesAsOf = today;
+        // Observed on an aggregator, not read from the provider's own table.
+        m.verifyPricing = true;
+      }
     }
 
     const top = (row.top_provider ?? {}) as Row;
@@ -303,6 +328,7 @@ export function syncModels(registry: RawRegistry, payload: unknown, now: Date): 
     changed: JSON.stringify(next) !== JSON.stringify(registry),
     rowsRead: rows.length,
     priceChanges,
+    priceDiffers,
     limitChanges,
     retirementChanges,
     gone,
@@ -360,7 +386,9 @@ export function renderReport(r: SyncResult, now: Date): string {
     L.push("");
   }
   if (r.priceChanges.length > 0) {
-    L.push("**Prices** — `pricesAsOf` moved to today and `verifyPricing` set until checked against the provider's own table.");
+    L.push(
+      `**Prices** — the bundled price was over ${STALE_PRICE_DAYS} days old or never checked with the provider, so the list's is used. \`pricesAsOf\` moved to today and \`verifyPricing\` set until checked against the provider's own table.`,
+    );
     L.push("");
     L.push(...changeTable(r.priceChanges), "");
   }
@@ -377,9 +405,16 @@ export function renderReport(r: SyncResult, now: Date): string {
 
   L.push("### Needs a decision (not applied)");
   L.push("");
-  if (r.gone.length + r.candidates.length + r.toCheck.length === 0) {
+  if (r.gone.length + r.candidates.length + r.toCheck.length + r.priceDiffers.length === 0) {
     L.push("Nothing.");
     L.push("");
+  }
+  if (r.priceDiffers.length > 0) {
+    L.push(
+      `**Official price kept; the public list differs.** These prices were checked against the provider within ${STALE_PRICE_DAYS} days, so they stay, and the site shows the list's figure beside them. If the provider really changed the price, edit it and \`pricesAsOf\` by hand.`,
+    );
+    L.push("");
+    L.push(...changeTable(r.priceDiffers), "");
   }
   if (r.gone.length > 0) {
     L.push("**Gone from the public list.** Remove from `models`, add to `retired` with a `successorId` so old share links say what replaced them:");
