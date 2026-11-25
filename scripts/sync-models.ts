@@ -47,7 +47,7 @@ if (reportPath) await writeFile(reportPath, report);
 else console.log(report);
 
 console.error(
-  `model sync: ${result.priceChanges.length} price, ${result.limitChanges.length} limit, ` +
+  `model sync: ${result.priceChanges.length} price (${result.priceDiffers.length} official kept), ${result.limitChanges.length} limit, ` +
     `${result.retirementChanges.length} retirement change(s); ${result.gone.length} gone; ` +
     `${result.candidates.length} new candidate(s); registry ${result.changed ? (flag("--write") ? "updated" : "would change") : "unchanged"}.`,
 );

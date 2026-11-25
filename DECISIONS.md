@@ -1147,3 +1147,30 @@ is accurate enough to state plainly.
   started, so its frequency isn't stated until it has run on schedule.
 - **Share image**: re-captured from the current page at the same 1600x1375
   size, in the light theme. The old one showed the retired seven-model lineup.
+
+## 2026-11-25 — D41: The weekly sync keeps official prices too
+
+D39 made the site keep a current official price when the public list
+disagrees. The weekly sync still wrote the list's price into `models.json`,
+so its first scheduled run (PR #11) proposed replacing Gemini 3.8 Flash's
+$0.75/$3.75 with the list's $0.825/$4.125, the markup D39 declined. Merging
+it would have undone D39.
+
+- **Same rule in both places**: a price checked against the provider within
+  `STALE_PRICE_DAYS` (90) and not marked `verifyPricing` is kept, and the
+  list's figure goes into the report under "Official price kept". Only a
+  stale or unverified price takes the list's, marked `verifyPricing` as
+  before. The age rule moved to `src/core/priceAge.ts` so the app and the
+  sync script share one definition.
+- **Announced prices**: once a `scheduledPrice` date has come, the list is
+  compared with that price, and the sync never writes over it, since it is
+  curated and the app applies it over the bundled one anyway.
+- **Nothing silent**: the report now goes to the run's summary page every
+  run, because a reported-only difference opens no PR. A run that would
+  change nothing closes any open sync PR from an earlier run.
+- PR #11 is closed unmerged.
+
+Correction to D40: the first scheduled run did start, at 18:21 UTC on
+2026-11-23, about 12 hours after its 06:17 slot. GitHub delays scheduled
+runs. The site still doesn't state a weekly cadence; that can change once a
+few more runs have landed on schedule.

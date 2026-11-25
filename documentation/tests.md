@@ -1,6 +1,6 @@
 # Test coverage
 
-The default deterministic gate is `npm test`: 137 tests pass across eight test
+The default deterministic gate is `npm test`: 139 tests pass across eight test
 files. The provider-truth tests (36: three Claude models × six texts × two
 checks) are skipped unless `ANTHROPIC_API_KEY` is
 deliberately supplied. Nothing in the application can contact a model provider,
@@ -37,7 +37,7 @@ repository does not yet require that check through a protected-branch rule.
 | Anthropic band vs measured ratios | The Anthropic band contains the measured Claude/o200k range (1.345–1.801) and its point is within ±12% of the median and corpus ratio (D36) | A band edit that drifts away from the evidence fails offline | `tests/tokenizer.test.ts` | Unit | Existing |
 | Pricing as billed | Requests over a model's long-prompt threshold are billed at its long rate per turn (exclusive threshold); announced price changes apply from their date; malformed tier fields fail the registry; the card says when thinking is left out | A long-prompt undercount, or a total silently excluding thinking, fails | `src/core/estimate.ts`; `tests/pricing.test.ts` | Unit | Existing |
 | Model registry | `models.json` validates at load (tier, provider, positive prices, unique ids and slugs, retired successors exist, default reference exists); copy counts the registry | A typo in a tier or price fails the build and the suite | `src/core/models.ts`; `tests/model-sync.test.ts` | Unit | Existing |
-| Model sync | Writes only machine fields; a changed price is marked `verifyPricing`; new and vanished models are reported, never applied; each candidate is listed once; idempotent; a payload that doesn't look like the list throws | A sync touching tier/identity, or marking every model gone on a bad response, fails | `src/core/modelSync.ts`; `tests/model-sync.test.ts`; `cron.md` | Unit | Existing |
+| Model sync | Writes only machine fields; a current official price is kept and the list's different one reported, while a stale or unverified price takes the list's and is marked `verifyPricing`; an announced price in effect is compared, never overwritten; new and vanished models are reported, never applied; each candidate is listed once; idempotent; a payload that doesn't look like the list throws | A sync touching tier/identity, or marking every model gone on a bad response, fails | `src/core/modelSync.ts`; `tests/model-sync.test.ts`; `cron.md` | Unit | Existing |
 | Retired models | A retired share-link model resolves to its named successor with a note; an unknown one to the default with a note; `retires <date>` follows the injected date on the card | A silent model swap on an old link fails | `tests/model-sync.test.ts` | Unit | Existing |
 | Retiring models in advice | A model with `retiresOn` is never "start here", a step-up, the cheaper-tier lint pick or a verified pick, but stays in the comparison; if every model is retiring the cheapest is still used | Advice that starts new work on a model being shut down fails | `src/core/card.ts`; `tests/model-sync.test.ts` | Unit | Existing |
 | Lineup-independent tests | Suites pick models by provider and tier (`tests/models.ts`), never by id | A lineup change breaking unrelated tests fails review | `tests/models.ts` | Convention | Existing |

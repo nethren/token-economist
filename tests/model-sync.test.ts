@@ -231,7 +231,58 @@ describe("model sync (weekly PR)", () => {
     expect(r.candidates).toEqual([]);
   });
 
-  it("applies price, limit and retirement changes; flags the price for verification", () => {
+  it("keeps a current official price and reports the list's different one", () => {
+    // Gemini 3.8 Flash on 2026-11-23: the list showed 10% over Google's price.
+    const list = echoList(BASE);
+    const target = BASE.models[0];
+    const i = list.data.findIndex((x) => x.id === target.openrouterSlug);
+    list.data[i] = {
+      ...list.data[i],
+      pricing: { prompt: String((target.inputPerMTok * 1.1) / 1e6), completion: String((target.outputPerMTok * 1.1) / 1e6) },
+    };
+    const soon = new Date(`${target.pricesAsOf}T12:00:00Z`);
+    soon.setUTCDate(soon.getUTCDate() + 4);
+    const r = syncModels(BASE, list, soon);
+    expect(r.changed).toBe(false);
+    expect(r.next.models[0]).toEqual(BASE.models[0]);
+    expect(r.priceChanges).toEqual([]);
+    expect(r.priceDiffers.map((c) => [c.field, c.from])).toEqual([
+      ["inputPerMTok", target.inputPerMTok],
+      ["outputPerMTok", target.outputPerMTok],
+    ]);
+    const body = renderReport(r, soon);
+    expect(body).toContain("Official price kept; the public list differs");
+    expect(body).not.toContain("Nothing.");
+
+    // Unverified: the list's price is used, as before.
+    const unverified = clone(BASE);
+    unverified.models[0].verifyPricing = true;
+    const u = syncModels(unverified, list, soon);
+    expect(u.priceChanges).toHaveLength(2);
+    expect(u.next.models[0].inputPerMTok).toBeCloseTo(target.inputPerMTok * 1.1, 9);
+  });
+
+  it("an announced price in effect is what the list is compared with, and is never overwritten", () => {
+    const reg = clone(BASE);
+    for (const x of reg.models) delete x.scheduledPrice; // only the one under test
+    const m = reg.models[0];
+    m.scheduledPrice = { from: "2026-12-01", inputPerMTok: m.inputPerMTok * 2, outputPerMTok: m.outputPerMTok * 2 };
+    const list = echoList(BASE);
+    const i = list.data.findIndex((x) => x.id === m.openrouterSlug);
+    const after = new Date("2027-06-01T12:00:00Z"); // bundled price long stale
+    // The list moved to the announced price: nothing to do.
+    list.data[i] = { ...list.data[i], pricing: { prompt: String((m.inputPerMTok * 2) / 1e6), completion: String((m.outputPerMTok * 2) / 1e6) } };
+    const same = syncModels(reg, list, after);
+    expect(same.priceChanges).toEqual([]);
+    expect(same.priceDiffers).toEqual([]);
+    // The list shows something else: reported against the announced price, not written.
+    list.data[i] = { ...list.data[i], pricing: { prompt: String((m.inputPerMTok * 3) / 1e6), completion: String((m.outputPerMTok * 2) / 1e6) } };
+    const other = syncModels(reg, list, after);
+    expect(other.changed).toBe(false);
+    expect(other.priceDiffers).toEqual([expect.objectContaining({ field: "inputPerMTok", from: m.inputPerMTok * 2 })]);
+  });
+
+  it("applies price, limit and retirement changes when the bundled price is stale; flags it for verification", () => {
     const list = echoList(BASE);
     const target = BASE.models[0];
     const i = list.data.findIndex((x) => x.id === target.openrouterSlug);
@@ -241,13 +292,14 @@ describe("model sync (weekly PR)", () => {
       top_provider: { context_length: 2_000_000, max_completion_tokens: 64_000 },
       expiration_date: "2026-12-11",
     };
-    const r = syncModels(BASE, list, NOW);
+    const later = new Date("2027-03-01T12:00:00Z"); // over 90 days after pricesAsOf
+    const r = syncModels(BASE, list, later);
     const m = r.next.models[0];
     expect(r.changed).toBe(true);
     expect(m).toMatchObject({
       inputPerMTok: 3,
       outputPerMTok: 15,
-      pricesAsOf: "2026-11-18",
+      pricesAsOf: "2027-03-01",
       verifyPricing: true,
       contextWindow: 2_000_000,
       maxOutput: 64_000,
@@ -258,7 +310,7 @@ describe("model sync (weekly PR)", () => {
     // Untouched models keep their snapshot date.
     expect(r.next.models[1].pricesAsOf).toBe(BASE.models[1].pricesAsOf);
     // Second run on its own output is a no-op: the job is idempotent.
-    expect(syncModels(r.next, list, NOW).changed).toBe(false);
+    expect(syncModels(r.next, list, later).changed).toBe(false);
   });
 
   it("reports a reply cap above half the context window instead of applying it", () => {

@@ -125,19 +125,7 @@ export const RETIRED: RetiredModel[] = REGISTRY.retired;
 /** Used when a share link names a model this build has never heard of. */
 export const DEFAULT_REFERENCE_ID: string = REGISTRY.defaultReferenceId;
 
-/** Price snapshots older than this are flagged "stale — verify" in UI + card. */
-export const STALE_PRICE_DAYS = 90;
-
-/**
- * Whole days between the price snapshot and a reference date (ISO yyyy-mm-dd
- * both). Pure function of its inputs — callers inject "today" so the cost
- * card stays deterministic under an injected generatedAt.
- */
-export function priceAgeDays(pricesAsOf: string, onDate: string): number {
-  const ms = Date.parse(onDate) - Date.parse(pricesAsOf);
-  if (!Number.isFinite(ms)) return 0;
-  return Math.max(0, Math.floor(ms / 86_400_000));
-}
+export { STALE_PRICE_DAYS, priceAgeDays } from "./priceAge";
 
 const usd = (n: number) => `$${Number(n.toFixed(4))}`;
 /** "$0.75/$3.75": input/output USD per 1M tokens, without float noise. */
